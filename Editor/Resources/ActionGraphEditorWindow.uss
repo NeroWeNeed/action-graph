@@ -1,0 +1,39 @@
+ActionGraphView {
+    flex-grow: 1;
+    background-color: #202020;
+}
+#content {
+    flex-grow: 1;
+}
+.action-graph-field-container {
+    background-color: #393939;
+    
+}
+Inspector {
+    background-color: #2B2B2B;
+    border-color: #191919;
+    padding: 0px 0px 0px 0px;
+    overflow: hidden;
+}
+Inspector #header {
+    background-color: #393939;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    border-bottom-color: #191919;
+    border-bottom-width: 1px;
+    font-size: 14px;
+    padding: 2px;
+}
+Inspector #titleContainer {
+    padding: 8px;
+}
+Inspector .resizer {
+    opacity: 0;
+}
+.action-graph-field-container {
+    flex-direction: row;
+    align-items: flex-start;
+}
+.action-graph-field-container .type-field {
+    align-self: center;
+}

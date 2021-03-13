@@ -1,0 +1,9 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement>
+        <ui:Box>
+            <uie:PropertyField binding-path="name" />
+            <uie:PropertyField binding-path="type" />
+            <uie:PropertyField binding-path="variableType" />
+        </ui:Box>
+    </ui:VisualElement>
+</ui:UXML>

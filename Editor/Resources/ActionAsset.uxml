@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" >
+    <ui:VisualElement>
+        <uie:PropertyField binding-path="action" />
+        <ui:Button display-tooltip-when-elided="true" name="open" text="Open"/>
+    </ui:VisualElement>
+</ui:UXML>

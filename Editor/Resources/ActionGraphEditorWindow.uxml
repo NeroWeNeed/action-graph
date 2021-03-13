@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="header">
+        <uie:Toolbar>
+            <uie:ToolbarButton text="Save Asset" name="save"/>
+        </uie:Toolbar>
+    </ui:VisualElement>
+    <ui:VisualElement name="content">
+        <NeroWeNeed.ActionGraph.Editor.Graph.ActionGraphView name="graphView" />
+    </ui:VisualElement>
+</ui:UXML>

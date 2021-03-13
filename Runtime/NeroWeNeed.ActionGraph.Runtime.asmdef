@@ -1,0 +1,16 @@
+{
+    "name": "NeroWeNeed.ActionGraph.Runtime",
+    "rootNamespace": "",
+    "references": [
+        "GUID:4e4a10f31e908ca46a41e81cad616cbc"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

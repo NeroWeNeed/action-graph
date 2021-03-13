@@ -1,0 +1,16 @@
+{
+    "name": "github.neroweneed.action-graph",
+    "version": "1.0.0",
+    "displayName": "Action Graph",
+    "description": "Editor tool for creating pluggable actions.",
+    "unity": "2021.1",
+    "dependencies": {
+        "github.neroweneed.commons": "1.0.0",
+        "com.unity.nuget.mono-cecil": "0.1.6-preview.2"
+    },
+    "author": {
+        "name": "NeroWeNeed",
+        "email": "neroweneed@gmail.com",
+        "url": "https://github.com/NeroWeNeed"
+    }
+}

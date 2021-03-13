@@ -1,0 +1,13 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
+    <ui:VisualElement>
+        <ui:VisualElement name="header">
+            <ui:VisualElement name="titleContainer">
+                <ui:Label text="Inspector" display-tooltip-when-elided="True" name="title" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+        <ui:VisualElement name="content">
+            <ui:VisualElement name="variableContainer" />
+        </ui:VisualElement>
+        
+    </ui:VisualElement>
+</ui:UXML>

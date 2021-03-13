@@ -1,0 +1,17 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement style="flex-grow: 1;">
+        <ui:Label text="General" class="section-title" />
+        <uie:PropertyField binding-path="artifactDirectory" label="Artifact Directory" />
+        <!-- <uie:PropertyField binding-path="syncOnReload" label="Search On Reload" /> -->
+        <!-- <ui:Button name="reload-actions" text="Reload Actions" style="align-self: flex-start;" /> -->
+        <ui:Label text="Actions" class="section-title" />
+        <ui:VisualElement>
+            <ui:ListView binding-path="actions" name="actions" label="Actions" style="min-height: 180px; max-height: 240px;" item-height="60" reorderable="true" show-bound-collection-size="false" />
+            <ui:VisualElement style="flex-direction: row; align-self: flex-end;">
+                <ui:Button name="add-action" text="+" style="-unity-font-style: bold;" />
+                <ui:Button name="remove-action" text="-" style="-unity-font-style: bold;" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

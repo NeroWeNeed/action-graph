@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="header">
+        <uie:Toolbar>
+            <uie:ToolbarSearchField style="flex-grow: 1;" name="search" />
+        </uie:Toolbar>
+    </ui:VisualElement>
+    <ui:VisualElement name="content" style="flex-grow: 1;">
+        <ui:ListView name="items" item-height="20" style="min-height: 20;"/>
+    </ui:VisualElement>
+</ui:UXML>

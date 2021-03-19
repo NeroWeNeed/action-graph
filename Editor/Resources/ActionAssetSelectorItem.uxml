@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement style="flex-direction: row; margin-left: 20px; height: 20px;">
+        <ui:Image name="icon" style="width: 17px; height: 17px; align-self: center;" />
+        <ui:Label name="text" style="-unity-text-align: middle-left; margin-left: 2px;" />
+    </ui:VisualElement>
+</ui:UXML>

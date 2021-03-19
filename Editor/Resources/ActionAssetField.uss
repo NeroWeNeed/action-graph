@@ -1,0 +1,40 @@
+.action-asset-field {
+    margin: 1px 3px 1px 3px;
+    
+}
+.action-asset-field--input {
+    flex-direction: row;
+    background-color: #282828;
+    border-width: 1px;
+    border-color: black;
+    border-radius: 3px;
+    flex-grow: 1;
+}
+.action-asset-field--selector {
+    -unity-font-style: bold;
+    font-size: 13px;
+    background-color: #373737;
+    padding: 0px;
+    -unity-text-align: middle-center;
+    width: 18px;
+    cursor: link;
+}
+.action-asset-field--display {
+    flex-direction: row;
+    flex-grow: 1;
+    
+}
+
+.action-asset-field--selector:hover {
+    background-color: #4b4b4b;
+}
+.action-asset-field--input:hover {
+    border-color: #5e5e5e;
+}
+.action-asset-field--icon {
+    margin-left: 2px;
+    }
+.action-asset-field--name {
+    flex-grow: 1;
+    margin-left: 2px;
+}

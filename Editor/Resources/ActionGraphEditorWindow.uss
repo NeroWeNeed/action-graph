@@ -36,4 +36,17 @@ Inspector .resizer {
 }
 .action-graph-field-container .type-field {
     align-self: center;
+    flex-grow: 1;
+}
+Inspector .managed-tab-view--tab-container {
+    border-bottom-color: #191919;
+}
+Inspector .managed-tab-view--tab {
+    border-width: 0px;
+}
+Inspector .managed-tab-view--tab--selected {
+    background-color: #191919;
+}
+Inspector .managed-tab-view--tab--unselected {
+    background-color: #393939;
 }

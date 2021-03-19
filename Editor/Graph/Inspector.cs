@@ -17,7 +17,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
         public Inspector(ActionGraphView graphView) {
             this.graphView = graphView;
             rootElement = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(Uxml).CloneTree();
-            variableContainer = rootElement.Q<VisualElement>("variableContainer");
+            this.style.paddingBottom = this.style.paddingLeft = this.style.paddingRight = this.style.paddingTop = 0;
+            variableContainer = rootElement.Q<VisualElement>("variables");
             this.Add(rootElement);
             //base.hierarchy.Add(rootElement);
             this.capabilities = Capabilities.Collapsible | Capabilities.Movable | Capabilities.Resizable;

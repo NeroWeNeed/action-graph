@@ -14,11 +14,28 @@ using static NeroWeNeed.ActionGraph.Editor.ActionGraphGlobalSettings;
 namespace NeroWeNeed.ActionGraph.Editor {
     public static class ActionGraphUtility {
 
-        public static ActionModel CreateModel(this ActionAsset asset) {
+        public static ActionAssetModel CreateModel(this ActionAsset asset) {
             var jsonSettings = JsonConvert.DefaultSettings.Invoke();
             jsonSettings.TypeNameHandling = TypeNameHandling.All;
-            return JsonConvert.DeserializeObject<ActionModel>(asset.json.text, jsonSettings);
-
+            var path = AssetDatabase.GetAssetPath(asset);
+            if (string.IsNullOrEmpty(path)) {
+                return new ActionAssetModel();
+            }
+            else {
+                var json = File.ReadAllText(path);
+                return JsonConvert.DeserializeObject<ActionAssetModel>(json, jsonSettings);
+            }
+        }
+        public static void UpdateAsset(this ActionAsset asset, ActionAssetModel model) {
+            var path = AssetDatabase.GetAssetPath(asset);
+            using (var stream = File.Create(path)) {
+                using (var writer = new StreamWriter(stream)) {
+                    var jsonSettings = JsonConvert.DefaultSettings.Invoke();
+                    jsonSettings.TypeNameHandling = TypeNameHandling.All;
+                    writer.Write(JsonConvert.SerializeObject(model, jsonSettings));
+                }
+            }
+            AssetDatabase.Refresh();
         }
         /*         public static ActionAsset ToAsset(this ActionModel model) {
                     var asset = ScriptableObject.CreateInstance<ActionAsset>();

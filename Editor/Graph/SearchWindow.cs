@@ -14,9 +14,9 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
         public ActionGraphView graphView;
         public List<SearchTreeEntry> CreateSearchTree(SearchWindowContext context) {
-            var asset = ProjectUtility.GetSettings<ActionGraphGlobalSettings>();
+            var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
 
-            if (asset == null) {
+            if (settings == null) {
                 return null;
             }
             List<SearchTreeEntry> result = new List<SearchTreeEntry>();
@@ -25,22 +25,22 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             if (graphView.modules.Count > 1) {
 
                 foreach (var module in graphView.modules) {
-                    result.Add(new SearchTreeGroupEntry(new GUIContent(asset[module.asset.action].Name), 1));
-                    CreateSearchTree(result, context, module, asset, 2);
+                    result.Add(new SearchTreeGroupEntry(new GUIContent(settings[module.action].Name), 1));
+                    CreateSearchTree(result, context, module, settings, 2);
                 }
             }
             else if (graphView.modules.Count == 1) {
-                CreateSearchTree(result, context, graphView.modules[0], asset, 1);
+                CreateSearchTree(result, context, graphView.modules[0], settings, 1);
             }
             return result;
         }
-        private void CreateSearchTree(List<SearchTreeEntry> treeEntries, SearchWindowContext context, ActionModule module, ActionGraphGlobalSettings asset, int depth) {
-            var info = asset[module.asset.action];
-            foreach (var node in info.nodes) {
-                treeEntries.Add(new SearchTreeEntry(new GUIContent(node.Name))
+        private void CreateSearchTree(List<SearchTreeEntry> treeEntries, SearchWindowContext context, ActionModule module, ActionGraphGlobalSettings settings, int depth) {
+            var info = settings[module.action];
+            foreach (var action in settings.GetActions(module.action)) {
+                treeEntries.Add(new SearchTreeEntry(new GUIContent(action.Name))
                 {
                     level = depth,
-                    userData = new EntryData { actionType = new ActionType { guid = info.guid }, identifier = node.identifier }
+                    userData = new EntryData { actionType = module.action, identifier = action.identifier }
                 });
             }
         }
@@ -48,19 +48,21 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public bool OnSelectEntry(SearchTreeEntry searchTreeEntry, SearchWindowContext context) {
             if (searchTreeEntry.userData is EntryData data) {
                 var guid = Guid.NewGuid().ToString("N");
-                var settings = ProjectUtility.GetSettings<ActionGraphGlobalSettings>();
-                var actionData = new ActionGraphModel.ActionNodeData
+                var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
+                var actionData = new ActionNodeData
                 {
-                    actionType = data.actionType,
+                    actionId = data.actionType,
                     identifier = data.identifier,
+                    subIdentifier = settings.GetAction(data.actionType,data.identifier).GetDefaultSubIdentifier()
                 };
                 graphView.model[guid] = actionData;
-                graphView.AddElement(actionData.CreateNode(default, settings, new Rect(graphView.contentViewContainer.WorldToLocal(graphView.panel.visualTree.ChangeCoordinatesTo(graphView.panel.visualTree, context.screenMousePosition - graphView.window.position.position)), ActionGraphView.DefaultNodeSize), guid));
+                graphView.AddElement(actionData.CreateNode(graphView, settings, new Rect(graphView.contentViewContainer.WorldToLocal(graphView.panel.visualTree.ChangeCoordinatesTo(graphView.panel.visualTree, context.screenMousePosition - graphView.window.position.position)), ActionGraphView.DefaultNodeSize), guid));
+                graphView.RefreshNodeConnections();
             }
             return true;
         }
         private struct EntryData {
-            public ActionType actionType;
+            public ActionId actionType;
             public string identifier;
 
         }

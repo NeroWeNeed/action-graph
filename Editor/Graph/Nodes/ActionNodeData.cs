@@ -1,0 +1,152 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using NeroWeNeed.Commons.Editor;
+using UnityEditor.Experimental.GraphView;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+namespace NeroWeNeed.ActionGraph.Editor.Graph {
+    public class ActionNodeData : NodeData {
+
+        public string identifier;
+        public string subIdentifier;
+        public Dictionary<string, object> properties = new Dictionary<string, object>();
+        public override ActionAssetModel.Node ToModelNode(Rect layout) => new ActionAssetModel.Node<ActionNodeData>(this, layout);
+        public override GraphElement CreateNode(ActionGraphView graphView, ActionGraphGlobalSettings settings, Rect layout, string guid = null) {
+            var info = settings[actionId];
+            var nodeInfo = settings.GetAction(actionId, identifier);
+            if (string.IsNullOrEmpty(guid))
+                guid = Guid.NewGuid().ToString("N");
+            var node = new Node()
+            {
+                viewDataKey = guid,
+                title = nodeInfo.Name
+            };
+            node.capabilities ^= Capabilities.Collapsible;
+            var inputPort = Port.Create<Edge>(Orientation.Horizontal, Direction.Input, Port.Capacity.Multi, ActionGraphView.CreateActionPortType(info.delegateType));
+            inputPort.portName = "in";
+            inputPort.AddToClassList(ActionGraphView.NodePortClassName);
+            inputPort.AddToClassList(ActionGraphView.NodeInputPortClassName);
+            inputPort.AddToClassList(ActionGraphView.CollectablePortClassName);
+            node.inputContainer.Add(inputPort);
+            var outputPort = Port.Create<Edge>(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, ActionGraphView.CreateActionPortType(info.delegateType));
+            outputPort.portName = "out";
+            outputPort.AddToClassList(ActionGraphView.NodePortClassName);
+            outputPort.AddToClassList(ActionGraphView.NodeOutputPortClassName);
+            outputPort.AddToClassList(ActionGraphView.OutputPortClassName);
+            outputPort.RegisterCallback<PortUpdateEvent>(evt =>
+            {
+                var self = (Port)evt.currentTarget;
+                var graphView = self.GetFirstAncestorOfType<ActionGraphView>();
+                if (graphView == null)
+                    return;
+                var other = evt.portA == self ? evt.portB : evt.portA;
+                switch (evt.type) {
+                    case PortUpdateEventType.Connected:
+                        graphView.model[self.node.viewDataKey].next = other.node.viewDataKey;
+                        break;
+                    case PortUpdateEventType.Disconnected:
+                        if (graphView.model[self.node.viewDataKey].next == other.viewDataKey)
+                            graphView.model[self.node.viewDataKey].next = null;
+                        break;
+                }
+            });
+            node.outputContainer.Add(outputPort);
+
+            if (nodeInfo.MethodCount > 1) {
+                node.RegisterCallback<ContextualMenuPopulateEvent>(evt =>
+                {
+                    var self = (Node)evt.target;
+                    var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
+                    var graphView = self.GetFirstAncestorOfType<ActionGraphView>();
+                    if (settings == null || graphView == null)
+                        return;
+                    var data = graphView.model.GetData<ActionNodeData>(self.viewDataKey);
+                    var action = settings.GetAction(data.actionId, data.identifier);
+
+                    foreach (var method in action.methods) {
+                        evt.menu.AppendAction($"Type/{method.Key}", (a) =>
+                        {
+                            data.subIdentifier = (string)a.userData;
+                            data.BuildNodeContents(graphView, self, settings, settings[data.actionId], action, true);
+                            graphView.RefreshNodeConnections();
+                        }, (a) => data.subIdentifier == (string)a.userData ? DropdownMenuAction.Status.Checked : DropdownMenuAction.Status.Normal, method.Key);
+                    }
+                    evt.menu.AppendSeparator();
+                });
+
+                //node.titleContainer.Add(methodSelector);
+            }
+            BuildNodeContents(graphView, node, settings, info, nodeInfo);
+            node.RegisterCallback<FieldUpdateEvent>(evt =>
+            {
+                var element = (Node)evt.currentTarget;
+                var graphView = element.GetFirstAncestorOfType<ActionGraphView>();
+                if (graphView == null)
+                    return;
+                if (evt.value == default) {
+                    graphView.model.GetData<ActionNodeData>(element.viewDataKey).properties.Remove(evt.path);
+                }
+                else {
+                    graphView.model.GetData<ActionNodeData>(element.viewDataKey).properties[evt.path] = evt.value;
+                }
+
+            });
+            node.RefreshExpandedState();
+            node.SetPosition(layout);
+
+            return node;
+        }
+
+        private void BuildNodeContents(ActionGraphView graphView, Node node, ActionGraphGlobalSettings settings, ActionGraphGlobalSettings.ActionInfo info, ActionSchema.Action action, bool clean = false) {
+            if (clean) {
+                foreach (var item in node.Query<VisualElement>(null, ActionGraphView.FieldClassName).ToList()) {
+                    if (item is Port port) {
+                        if (port.connected) {
+                            foreach (var edge in port.connections) {
+                                graphView.RemoveElement(edge);
+                            }
+                        }
+                        graphView.RemoveElement(port);
+                    }
+                    else if (item is GraphElement graphElement) {
+                        graphView.RemoveElement(graphElement);
+                    }
+                    else {
+                        item.RemoveFromHierarchy();
+                    }
+                }
+            }
+            var schema = ProjectUtility.GetOrCreateProjectAsset<TypeFieldSchema>();
+            var method = string.IsNullOrEmpty(subIdentifier) ? action.GetDefaultMethod() : action.methods[subIdentifier];
+            if (method.configType.IsCreated) {
+                method.configType.Value.Decompose((Type type, FieldInfo fieldInfo, string path, TypeDecompositionOptions _) =>
+                {
+                    object initialValue;
+                    if (properties.TryGetValue(path, out object value)) {
+                        try {
+                            initialValue = Convert.ChangeType(value, type);
+                        }
+                        catch (Exception) {
+                            initialValue = Activator.CreateInstance(type);
+                            properties[path] = initialValue;
+                        }
+                    }
+                    else {
+                        initialValue = Activator.CreateInstance(type);
+                    }
+                    var terminal = schema.CreateField(type, fieldInfo, initialValue, out BindableElement element);
+                    ActionNodeUtility.CreateNodeField(node, info.delegateType, type, fieldInfo, element, path);
+                    if (terminal) {
+                        element.bindingPath = path;
+                    }
+                    return terminal;
+                }, new TypeDecompositionOptions
+                {
+                    exploreChildren = true
+                });
+            }
+        }
+    }
+}

@@ -6,8 +6,12 @@
             </ui:VisualElement>
         </ui:VisualElement>
         <ui:VisualElement name="content">
-            <ui:VisualElement name="variableContainer" />
+            <NeroWeNeed.Commons.Editor.UIToolkit.ManagedTabView>
+                <ui:VisualElement name="variables" tabindex="0" />
+                <ui:VisualElement name="properties" tabindex="1" />
+            </NeroWeNeed.Commons.Editor.UIToolkit.ManagedTabView>
+
         </ui:VisualElement>
-        
+
     </ui:VisualElement>
 </ui:UXML>

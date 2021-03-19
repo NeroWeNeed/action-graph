@@ -6,7 +6,9 @@
     "unity": "2021.1",
     "dependencies": {
         "github.neroweneed.commons": "1.0.0",
-        "com.unity.nuget.mono-cecil": "0.1.6-preview.2"
+        "com.unity.nuget.mono-cecil": "0.1.6-preview.2",
+        "com.unity.nuget.newtonsoft-json": "2.0.0",
+        "jillejr.newtonsoft.json-for-unity.converters": "1.1.0-preview.2"
     },
     "author": {
         "name": "NeroWeNeed",

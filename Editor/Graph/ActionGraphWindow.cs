@@ -1,7 +1,11 @@
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using NeroWeNeed.Commons.Editor;
 using Newtonsoft.Json;
 using UnityEditor;
 using UnityEditor.Callbacks;
+using UnityEditor.Experimental.GraphView;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -23,7 +27,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             window.titleContent = new GUIContent($"Action Graph Editor ({asset.name})");
             window.minSize = new Vector2(640, 480);
             window.Show();
-            window.DockAsset(asset);
+            window.LoadAsset(asset);
             return window;
         }
         [OnOpenAsset(1)]
@@ -31,22 +35,27 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             var asset = EditorUtility.InstanceIDToObject(instanceID);
             if (asset is ActionAsset actionGraphAsset) {
                 var window = ShowWindow(actionGraphAsset);
-                window.DockAsset(actionGraphAsset);
+                window.LoadAsset(actionGraphAsset);
                 return true;
             }
             else {
                 return false;
             }
         }
-
-        private ActionAsset asset;
-        private ActionModel obj;
         private void OnEnable() {
+
             AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(Uxml).CloneTree(this.rootVisualElement);
             this.rootVisualElement.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(Uss));
             var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
             graphView.window = this;
-            this.rootVisualElement.Q<ToolbarButton>("save").clicked += () => graphView.Save();
+            var saveButton = this.rootVisualElement.Q<ToolbarButton>("save");
+            saveButton.clicked += () => graphView.SaveModules();
+            graphView.RegisterCallback<ActionGraphValidationUpdateEvent>(evt =>
+            {
+                saveButton.SetEnabled(graphView.IsValid());
+            });
+
+
             if (EditorPrefs.HasKey(EditorPrefKey)) {
                 var obj = JsonConvert.DeserializeObject<List<ActionModule>>(EditorPrefs.GetString(EditorPrefKey));
                 graphView.LoadModules(obj, true);
@@ -58,10 +67,16 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
             EditorPrefs.SetString(EditorPrefKey, JsonConvert.SerializeObject(graphView.modules));
         }
-        private void DockAsset(ActionAsset asset, bool clear = true) {
-            this.asset = asset;
-            var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
-            graphView.LoadModule(new ActionModule(asset), clear);
+        private void LoadAsset(ScriptableObject asset) {
+            if (asset is ActionAsset actionAsset) {
+                var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
+                graphView.LoadModule(new ActionModule(actionAsset), true);
+            }
+            else {
+                var fields = asset.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Where(field => field.IsSerializable()).ToList();
+                
+            }
         }
+
     }
 }

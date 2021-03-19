@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement style="flex-direction: row; flex-grow: 1;">
+        <ui:Label class="action-asset-field--label unity-base-field__label" />
+        <ui:VisualElement class="action-asset-field--input">
+            <ui:VisualElement class="action-asset-field--display">
+                <ui:Image class="action-asset-field--icon" style="max-width: 17px; max-height: 17px;" />
+                <ui:Label class="action-asset-field--name" text="Temp" />
+            </ui:VisualElement>
+            <ui:Image class="action-asset-field--selector" style="max-width: 18px; max-height: 17px;" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

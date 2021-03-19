@@ -1,9 +1,9 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:VisualElement>
-        <ui:Box>
-            <uie:PropertyField binding-path="name" />
-            <uie:PropertyField binding-path="type" />
-            <uie:PropertyField binding-path="variableType" />
-        </ui:Box>
+        <uie:PropertyField binding-path="name" />
+        <uie:PropertyField binding-path="delegateType" />
+        <uie:PropertyField binding-path="variableType" />
+        <uie:PropertyField binding-path="validatorType" />
+        <uie:PropertyField binding-path="associatedDirectory" />
     </ui:VisualElement>
 </ui:UXML>

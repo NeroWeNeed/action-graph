@@ -119,14 +119,12 @@ namespace NeroWeNeed.ActionGraph.Editor {
         private UnityEngine.Object DNDValidation(UnityEngine.Object[] objs) {
             if (objs == null)
                 return null;
-            UnityEngine.Object obj;
             if (actionId.IsCreated) {
-                obj = objs.OfType<ActionAsset>().FirstOrDefault(o => o.actionId == actionId);
+                return objs.OfType<ActionAsset>().FirstOrDefault(o => o.actionId == actionId);
             }
             else {
-                obj = objs.OfType<ActionAsset>().FirstOrDefault();
+                return objs.OfType<ActionAsset>().FirstOrDefault();
             }
-            return obj;
         }
 
         public void SetValueWithoutNotify(UnityEngine.Object newValue) {

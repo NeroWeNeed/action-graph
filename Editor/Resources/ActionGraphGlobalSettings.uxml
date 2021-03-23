@@ -5,9 +5,10 @@
         <!-- <uie:PropertyField binding-path="syncOnReload" label="Search On Reload" /> -->
         <!-- <ui:Button name="reload-actions" text="Reload Actions" style="align-self: flex-start;" /> -->
         <ui:Label text="Actions" class="section-title" />
-        <ui:VisualElement>
+        <ui:VisualElement name="actions">
             <!-- ui:ListView binding-path="actions" name="actions" label="Actions" style="min-height: 180px; max-height: 240px;" item-height="60" reorderable="true" show-bound-collection-size="false" /> -->
-            <NeroWeNeed.Commons.Editor.UIToolkit.ManagedListView binding-path="actions" name="actions" style="min-height: 400px;" item-height="100" show-border="true" show-bound-collection-size="false" />
+            <!-- <NeroWeNeed.Commons.Editor.UIToolkit.ManagedListView binding-path="actions" name="actions" style="min-height: 400px;" item-height="100" show-border="true" show-bound-collection-size="false" /> -->
+
         </ui:VisualElement>
 
     </ui:VisualElement>

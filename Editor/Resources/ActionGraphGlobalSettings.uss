@@ -2,4 +2,5 @@
     -unity-font-style: bold;
     font-size: 14px;
     margin-bottom: 8px;
+    margin-top: 8px;
 }

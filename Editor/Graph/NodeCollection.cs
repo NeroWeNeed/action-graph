@@ -16,7 +16,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         }
         private static void CollectNodes(Port port, HashSet<string> guids, HashSet<NodeInfo> info) {
             foreach (var connection in port.connections) {
-                var node = connection.output.node;
+                var node = connection.output == port ? connection.input.node : connection.output.node;
+                
                 if (guids.Add(node.viewDataKey)) {
                     bool root = node.ClassListContains(ActionGraphView.ActionNodeClassName);
 

@@ -15,7 +15,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             var field = new ActionAssetField();
             var attr = fieldInfo.GetCustomAttribute<ActionAssetAttribute>();
             var settings = ProjectUtility.GetProjectAsset<ActionGraphGlobalSettings>();
-            if (attr != null && settings.TryGetActionInfo(attr.name, out ActionInfo info)) {
+            if (attr != null && settings.TryGetActionInfo(attr.name, out ActionDefinitionAsset info)) {
                 field.ActionId = info.id;
             }
             field.Label = property.displayName;

@@ -20,6 +20,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             port.viewDataKey = module.guid;
             port.AddToClassList(MasterNodePortClassName);
             port.portName = module.name;
+            port.portColor = settings[module.action].delegateType.Value.GetColor(Color.white);
             this.capabilities = Capabilities.Collapsible | Capabilities.Movable | Capabilities.Resizable | Capabilities.Selectable;
             port.RegisterCallback<PortUpdateEvent>(evt =>
             {

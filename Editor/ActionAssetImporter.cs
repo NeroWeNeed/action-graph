@@ -19,11 +19,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
             jsonSettings.TypeNameHandling = TypeNameHandling.All;
             var model = JsonConvert.DeserializeObject<ActionAssetModel>(json, jsonSettings);
             if (model.id.IsCreated) {
-                AssetDatabase.SetLabels(asset, new string[] { model.id.ToString() });
+                AssetDatabase.SetLabels(asset, new string[] { $"Action:{model.id.ToString()}" });
             }
-            /*             if (ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>().TryGetActionInfo(model.id, out ActionInfo info)) {
-                            AssetDatabase.SetLabels(asset, new string[] { info.name });
-                        } */
             asset.actionId = model.id;
             ctx.AddObjectToAsset("Action", asset, ActionAssetEditor.AssetIcon);
             ctx.SetMainObject(asset);

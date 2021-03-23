@@ -95,7 +95,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
         private void UpdateCache() {
             string filter = $"t:{nameof(ActionAsset)}";
             if (actionIdFilter.IsCreated) {
-                filter += $" l:{actionIdFilter}";
+                filter += $" l:Action:{actionIdFilter}";
             }
             if (!string.IsNullOrEmpty(nameFilter)) {
                 filter += $" name:{nameFilter}";

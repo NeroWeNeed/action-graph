@@ -18,7 +18,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor {
-    public class ActionGraphGlobalSettings : ProjectGlobalSettings, IInitializationCallback, IEnumerable<ActionGraphGlobalSettings.ActionInfo> {
+    public class ActionGraphGlobalSettings : ProjectGlobalSettings, IInitializationCallback, IEnumerable<ActionDefinitionAsset> {
         public const string Uxml = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphGlobalSettings.uxml";
         public const string Uss = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphGlobalSettings.uss";
         public const string DefaultTempDirectory = "Assets/Temp/ActionGraph";
@@ -39,35 +39,23 @@ namespace NeroWeNeed.ActionGraph.Editor {
             };
         }
         private static void OnDisableSettings(SerializedObject serializedObject) {
-            var obj = serializedObject?.targetObject as ActionGraphGlobalSettings;
-            if (obj == null)
-                return;
-            var names = new HashSet<string>();
-            var removed = obj.actions.RemoveAll(action => string.IsNullOrWhiteSpace(action.name) || !names.Add(action.name));
-            if (removed > 0) {
-                EditorUtility.SetDirty(obj);
-                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(obj));
-            }
         }
         private static void OnEnableSettings(SerializedObject serializedObject, VisualElement rootElement) {
-            var actions = rootElement.Q<ManagedListView>("actions");
-            actions.AddItem = () =>
-            {
-                ((ActionGraphGlobalSettings)serializedObject.targetObject).actions.Add(default);
-                EditorUtility.SetDirty(serializedObject.targetObject);
-            };
-            actions.RemoveItem = () =>
-            {
-                ((ActionGraphGlobalSettings)serializedObject.targetObject).actions.RemoveAt(actions.selectedIndex);
-                EditorUtility.SetDirty(serializedObject.targetObject);
-            };
+            var actions = rootElement.Q<VisualElement>("actions");
+            var target = ((ActionGraphGlobalSettings)serializedObject.targetObject);
+            foreach (var action in target.actions) {
+                var objField = new ObjectField() { value = action };
+                objField.SetEnabled(false);
+                actions.Add(objField);
+            }
         }
         [Delayed]
         public string artifactDirectory = DefaultArtifactDirectory;
         [Delayed]
         public string temporaryDirectory = DefaultTempDirectory;
 
-        public List<ActionInfo> actions = new List<ActionInfo>();
+        //public List<ActionInfo> actions2 = new List<ActionInfo>();
+        public List<ActionDefinitionAsset> actions = new List<ActionDefinitionAsset>();
 
 
         public ActionSchema.Action GetAction(ActionId actionId, string identifier) {
@@ -78,10 +66,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
             var actionInfo = this[actionId];
             return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().actions[actionInfo.delegateType].actions.Values;
         }
-        public ActionInfo this[ActionId id]
+        public ActionDefinitionAsset this[ActionId id]
         {
             get => actions.Find(actionInfo => actionInfo.id == id);
         }
+
         public bool TryGetNodeLayoutHandler(Type type, out NodeLayoutHandler handler) {
             if (ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().nodeLayoutHandlers.TryGetValue(type.AssemblyQualifiedName, out SerializableType handlerType)) {
                 handler = (NodeLayoutHandler)Activator.CreateInstance(handlerType.Value);
@@ -92,7 +81,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
                 return false;
             }
         }
-        public bool TryGetActionInfo(string name, out ActionInfo actionInfo) {
+
+        public bool TryGetActionInfo(string name, out ActionDefinitionAsset actionInfo) {
             actionInfo = default;
             var index = actions.FindIndex(actionInfo => actionInfo.name == name);
             if (index < 0) {
@@ -125,7 +115,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             return AssetDatabase.LoadAssetAtPath<ActionAsset>(path);
         }
 
-        public bool TryGetActionInfo(ActionId id, out ActionInfo actionInfo) {
+        public bool TryGetActionInfo(ActionId id, out ActionDefinitionAsset actionInfo) {
             actionInfo = default;
             var index = actions.FindIndex(actionInfo => actionInfo.id == id);
             if (index < 0) {
@@ -159,50 +149,27 @@ namespace NeroWeNeed.ActionGraph.Editor {
             if (artifactDirectory.EndsWith("/")) {
                 artifactDirectory = artifactDirectory.Substring(0, artifactDirectory.Length - 1);
             }
-            for (int i = 0; i < actions.Count; i++) {
-                actions[i]?.Validate();
-            }
 
         }
 
         public void OnInit() { }
 
-        public IEnumerator<ActionInfo> GetEnumerator() {
+        public IEnumerator<ActionDefinitionAsset> GetEnumerator() {
             return actions.GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator() {
             return actions.GetEnumerator();
         }
-
-        [Serializable]
-        public class ActionInfo {
-            [HideInInspector]
-            public ActionId id = ActionId.Create();
-            [Delayed]
-            public string name;
-            public string associatedDirectory;
-            public string Name { get => string.IsNullOrEmpty(name) ? delegateType.Value?.Name : name; }
-            [SuperTypeFilter(typeof(Delegate))]
-            [ConcreteTypeFilter]
-            public SerializableType delegateType;
-            [UnmanagedFilter]
-            [ConcreteTypeFilter]
-            public SerializableType variableType;
-            [SuperTypeFilter(typeof(ActionValidationRule))]
-            [ConcreteTypeFilter]
-            public SerializableType validatorType;
-            internal void Validate() {
-                if (string.IsNullOrWhiteSpace(name)) {
-                    name = $"Action({id})";
-                }
-                if (string.IsNullOrWhiteSpace(associatedDirectory)) {
-                    associatedDirectory = $"Assets/Actions/{name}";
-                }
-                if (associatedDirectory.EndsWith("/")) {
-                    associatedDirectory = associatedDirectory.Substring(0, associatedDirectory.Length - 1);
-                }
-            }
+        private void UpdateActionList() {
+            actions = AssetDatabase.FindAssets($"t:{nameof(ActionDefinitionAsset)}").Select(guid => AssetDatabase.LoadAssetAtPath<ActionDefinitionAsset>(AssetDatabase.GUIDToAssetPath(guid))).ToList();
+            EditorUtility.SetDirty(this);
+        }
+        private void OnEnable() {
+            EditorApplication.projectChanged += UpdateActionList;
+        }
+        private void OnDisable() {
+            EditorApplication.projectChanged -= UpdateActionList;
         }
     }
 }

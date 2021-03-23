@@ -37,9 +37,12 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             inputPort.AddToClassList(ActionGraphView.NodePortClassName);
             inputPort.AddToClassList(ActionGraphView.NodeInputPortClassName);
             inputPort.AddToClassList(ActionGraphView.CollectablePortClassName);
+            inputPort.portColor = info.delegateType.Value.GetColor(Color.white);
             node.inputContainer.Add(inputPort);
             var outputPort = Port.Create<Edge>(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, ActionGraphView.CreateActionPortType(info.delegateType));
             outputPort.portName = "out";
+            
+            outputPort.portColor = info.delegateType.Value.GetColor(Color.white);
             outputPort.AddToClassList(ActionGraphView.NodePortClassName);
             outputPort.AddToClassList(ActionGraphView.NodeOutputPortClassName);
             outputPort.AddToClassList(ActionGraphView.OutputPortClassName);
@@ -109,7 +112,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
             return node;
         }
-        private void BuildNodeContents(ActionGraphView graphView, Node node, ActionGraphGlobalSettings settings, ActionGraphGlobalSettings.ActionInfo info, ActionSchema.Action action, bool clean = false) {
+        private void BuildNodeContents(ActionGraphView graphView, Node node, ActionGraphGlobalSettings settings, ActionDefinitionAsset info, ActionSchema.Action action, bool clean = false) {
             if (clean) {
                 foreach (var item in node.Query<VisualElement>(null, ActionGraphView.FieldClassName).ToList()) {
                     if (item is Port port) {

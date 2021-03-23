@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 namespace NeroWeNeed.ActionGraph.Editor {
     public class ActionIdField : PopupField<ActionId> {
         private ActionGraphGlobalSettings settings;
-        public ActionIdField() : this(null) {}
+        public ActionIdField() : this(null) { }
         public ActionIdField(string label) : base(label, GetItems(), 0) {
             settings = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>();
             this.formatListItemCallback = FormatCell;
@@ -28,7 +28,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
         }
         private static List<ActionId> GetItems() {
-            var items = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>().Select(info => info.id).ToList();
+            var items = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>().Select(info =>
+            {
+                Debug.Log(info);
+                return info.id;
+            }).ToList();
             items.Insert(0, default);
             return items;
         }

@@ -19,14 +19,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
         {
             get
             {
-                if (assetIcon == null) {
-                    assetIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(ActionAssetEditor.Icon);
-                }
-                return assetIcon;
+                return assetIcon ??= AssetDatabase.LoadAssetAtPath<Texture2D>(ActionAssetEditor.Icon);
             }
         }
         private ActionGraphGlobalSettings settings;
-        [MenuItem("Assets/Create/Action Asset")]
+        [MenuItem("Assets/Create/Actions/Action Asset")]
         public static void CreateAsset() {
             var endName = EndNameEditAction.CreateInstance<ActionAssetEndNameEditAction>();
             ProjectWindowUtil.StartNameEditingIfProjectWindowExists(0, endName, $"{AssetDatabase.GetAssetPath(Selection.activeObject)}/ActionAsset", ActionAssetEditor.AssetIcon, null);
@@ -80,7 +77,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
             return rootElement;
         }
-        private bool ConfirmActionTypeChange(ActionGraphGlobalSettings.ActionInfo previousInfo, ActionGraphGlobalSettings.ActionInfo newInfo, out bool retainNodes) {
+        private bool ConfirmActionTypeChange(ActionDefinitionAsset previousInfo, ActionDefinitionAsset newInfo, out bool retainNodes) {
             retainNodes = false;
             string message;
             string okMessage;

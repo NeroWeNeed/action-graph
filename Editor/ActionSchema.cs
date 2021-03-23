@@ -37,7 +37,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
         internal Dictionary<string, AssemblyData> assemblies = new Dictionary<string, AssemblyData>();
         [JsonIgnore]
         public ReadOnlyDictionary<SerializableType, ActionData> actions;
-
+        [JsonIgnore]
+        public ReadOnlyDictionary<string, SerializableType> nodeLayoutHandlers;
         [JsonIgnore]
         public ActionData this[SerializableType type]
         {
@@ -51,28 +52,38 @@ namespace NeroWeNeed.ActionGraph.Editor {
         }
         private void UpdateView() {
             var actionView = new Dictionary<SerializableType, ActionData>();
-            foreach (var action in assemblies.SelectMany(assembly => assembly.Value.actions)) {
-                if (!actionView.TryGetValue(action.Value.action, out ActionData data)) {
-                    data = new ActionData();
-                    actionView[action.Value.action] = data;
+            var nodeLayoutHandlerView = new Dictionary<string, SerializableType>();
+            foreach (var assembly in assemblies.Values) {
+                foreach (var action in assembly.actions) {
+                    if (!actionView.TryGetValue(action.Value.action, out ActionData data)) {
+                        data = new ActionData();
+                        actionView[action.Value.action] = data;
+                    }
+                    data.actions[action.Value.identifier] = action.Value;
                 }
-                data.actions[action.Value.identifier] = action.Value;
+                foreach (var nodeLayoutHandler in assembly.nodeLayoutHandlers) {
+                    nodeLayoutHandlerView[nodeLayoutHandler.Key] = nodeLayoutHandler.Value;
+                }
             }
             this.actions = new ReadOnlyDictionary<SerializableType, ActionData>(actionView);
+            this.nodeLayoutHandlers = new ReadOnlyDictionary<string, SerializableType>(nodeLayoutHandlerView);
         }
         private void UpdateSchema(string assemblyPath, bool updateView = true) {
-            using var assembly = AssemblyDefinition.ReadAssembly(assemblyPath);
+            var resolver = new DefaultAssemblyResolver();
+            resolver.AddSearchDirectory("Library/ScriptAssemblies");
+            using var assembly = AssemblyDefinition.ReadAssembly(assemblyPath, new ReaderParameters { AssemblyResolver = resolver });
+
             string typeQualifiedName;
             var data = new AssemblyData();
             foreach (var module in assembly.Modules) {
                 foreach (var type in module.Types) {
+                    typeQualifiedName = type.FullName + ", " + assembly.FullName;
                     if (type.IsAbstract && type.IsSealed) {
-                        typeQualifiedName = type.FullName + ", " + assembly.FullName;
                         foreach (var methodDef in type.Methods) {
                             if (methodDef.HasCustomAttributes) {
                                 foreach (var attr in methodDef.CustomAttributes.Where(a => a.AttributeType.FullName == typeof(ActionAttribute).FullName)) {
 
-                                    if (!attr.HasConstructorArguments || attr.ConstructorArguments.Count < 2)
+                                    if (attr.ConstructorArguments.Count < 2)
                                         continue;
                                     TypeDefinition actionTypeDef = ((TypeReference)attr.ConstructorArguments[0].Value).Resolve();
                                     string identifier = (string)attr.ConstructorArguments[1].Value;
@@ -83,8 +94,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
                                         subIdentifier = DefaultSubIdentifier;
                                     }
 
-                                    var actionTypeQualifiedName = actionTypeDef.FullName + ", " + assembly.FullName;
-                                    var configTypeQualifiedName = configTypeDef == null ? null : configTypeDef.FullName + ", " + assembly.FullName;
+                                    var actionTypeQualifiedName = actionTypeDef.FullName + ", " + actionTypeDef.Module.Assembly.FullName;
+                                    var configTypeQualifiedName = configTypeDef == null ? null : configTypeDef.FullName + ", " + configTypeDef.Module.Assembly.FullName;
                                     var configType = new SerializableType(configTypeQualifiedName);
                                     var method = new SerializableMethod(typeQualifiedName, methodDef.Name);
                                     var actionMethod = new Action.ActionMethod
@@ -108,6 +119,14 @@ namespace NeroWeNeed.ActionGraph.Editor {
                                 }
                             }
 
+
+                        }
+                    }
+                    else if (!type.IsAbstract) {
+                        var typeAttr = type.CustomAttributes.FirstOrDefault(attr => attr.AttributeType.FullName == typeof(NodeLayoutHandlerAttribute).FullName);
+                        if (typeAttr != null) {
+                            var targetType = ((TypeReference)typeAttr.ConstructorArguments[0].Value).Resolve();
+                            data.nodeLayoutHandlers[targetType.FullName + ", " + targetType.Module.Assembly.FullName] = new SerializableType(typeQualifiedName);
                         }
                     }
                 }
@@ -167,9 +186,9 @@ namespace NeroWeNeed.ActionGraph.Editor {
         [Serializable]
         internal class AssemblyData {
             public Dictionary<string, Action> actions = new Dictionary<string, Action>();
-
+            public Dictionary<string, SerializableType> nodeLayoutHandlers = new Dictionary<string, SerializableType>();
             [JsonIgnore]
-            public bool IsEmpty { get => actions.Count == 0; }
+            public bool IsEmpty { get => actions.Count == 0 && nodeLayoutHandlers.Count == 0; }
         }
         public class ActionData {
             public Dictionary<string, Action> actions = new Dictionary<string, Action>();

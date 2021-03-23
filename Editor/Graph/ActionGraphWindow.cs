@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -22,7 +23,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             window.Show();
             return window;
         }
-        public static ActionGraphWindow ShowWindow(ActionAsset asset) {
+        public static ActionGraphWindow ShowWindow(ScriptableObject asset) {
             var window = GetWindow<ActionGraphWindow>();
             window.titleContent = new GUIContent($"Action Graph Editor ({asset.name})");
             window.minSize = new Vector2(640, 480);
@@ -43,7 +44,6 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             }
         }
         private void OnEnable() {
-
             AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(Uxml).CloneTree(this.rootVisualElement);
             this.rootVisualElement.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(Uss));
             var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
@@ -57,24 +57,57 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
 
             if (EditorPrefs.HasKey(EditorPrefKey)) {
-                var obj = JsonConvert.DeserializeObject<List<ActionModule>>(EditorPrefs.GetString(EditorPrefKey));
-                graphView.LoadModules(obj, true);
+                try {
+                    var obj = JsonConvert.DeserializeObject<ContextInfo>(EditorPrefs.GetString(EditorPrefKey));
+                    graphView.LoadModules(obj.modules, obj.Container);
+                }
+                catch (Exception) {
+                    Debug.LogError("Unable to restore ActionGraph state.");
+                }
+
+
             }
         }
         private void OnDisable() {
             var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
             if (graphView != null) { }
 
-            EditorPrefs.SetString(EditorPrefKey, JsonConvert.SerializeObject(graphView.modules));
+            EditorPrefs.SetString(EditorPrefKey, JsonConvert.SerializeObject(graphView.model.context));
         }
         private void LoadAsset(ScriptableObject asset) {
-            if (asset is ActionAsset actionAsset) {
+            var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
+            if (settings != null) {
+
                 var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
-                graphView.LoadModule(new ActionModule(actionAsset), true);
-            }
-            else {
-                var fields = asset.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Where(field => field.IsSerializable()).ToList();
-                
+                if (asset is ActionAsset actionAsset) {
+                    if (settings.TryGetActionInfo(actionAsset.actionId, out var info)) {
+                        graphView.LoadModule(new ActionModule(actionAsset, info.Name));
+                    }
+                    else {
+                        Debug.LogError($"Unknown Action Type with guid '{actionAsset.actionId}' in {actionAsset.name}");
+                    }
+                }
+                else {
+                    var actionModules = new List<ActionModule>();
+
+                    foreach (var fieldInfo in asset.GetType().GetSerializableFields(fieldInfo => typeof(ActionAsset).IsAssignableFrom(fieldInfo.FieldType))) {
+                        var attr = fieldInfo.GetCustomAttribute<ActionTypeAttribute>();
+                        if (attr != null && settings.TryGetActionInfo(attr?.name, out var info)) {
+                            actionModules.Add(new ActionModule((ActionAsset)fieldInfo.GetValue(asset) ?? settings.CreateTemporaryActionAsset(info.id), $"{fieldInfo.Name} [{info.Name}]"));
+                        }
+                    }
+                    if (actionModules.Count > 0) {
+                        graphView.LoadModules(actionModules, asset);
+                    }
+                    else {
+                        Debug.LogError("No Action Assets found!");
+                    }
+
+
+
+
+
+                }
             }
         }
 

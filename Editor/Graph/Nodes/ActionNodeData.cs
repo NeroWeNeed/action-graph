@@ -2,16 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using NeroWeNeed.Commons.Editor;
+using Newtonsoft.Json;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
-    public class ActionNodeData : NodeData {
-
+    public class ActionNodeData : NodeData, IPropertyContainer, INodeOutput {
         public string identifier;
         public string subIdentifier;
-        public Dictionary<string, object> properties = new Dictionary<string, object>();
+        public string next;
+        [JsonProperty]
+        private Dictionary<string, object> properties = new Dictionary<string, object>();
+        [JsonIgnore]
+        public Dictionary<string, object> Properties { get => properties; }
+        [JsonIgnore]
+        public string Next { get => next; set => next = value; }
+
         public override ActionAssetModel.Node ToModelNode(Rect layout) => new ActionAssetModel.Node<ActionNodeData>(this, layout);
         public override GraphElement CreateNode(ActionGraphView graphView, ActionGraphGlobalSettings settings, Rect layout, string guid = null) {
             var info = settings[actionId];
@@ -23,6 +30,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 viewDataKey = guid,
                 title = nodeInfo.Name
             };
+            node.AddToClassList(ActionGraphView.ActionNodeClassName);
             node.capabilities ^= Capabilities.Collapsible;
             var inputPort = Port.Create<Edge>(Orientation.Horizontal, Direction.Input, Port.Capacity.Multi, ActionGraphView.CreateActionPortType(info.delegateType));
             inputPort.portName = "in";
@@ -35,20 +43,23 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             outputPort.AddToClassList(ActionGraphView.NodePortClassName);
             outputPort.AddToClassList(ActionGraphView.NodeOutputPortClassName);
             outputPort.AddToClassList(ActionGraphView.OutputPortClassName);
+            outputPort.AddToClassList(ActionGraphView.NodeConnectionPortClassName);
             outputPort.RegisterCallback<PortUpdateEvent>(evt =>
             {
                 var self = (Port)evt.currentTarget;
                 var graphView = self.GetFirstAncestorOfType<ActionGraphView>();
+
                 if (graphView == null)
                     return;
+                var data = graphView.model.GetData<ActionNodeData>(self.node.viewDataKey);
                 var other = evt.portA == self ? evt.portB : evt.portA;
                 switch (evt.type) {
                     case PortUpdateEventType.Connected:
-                        graphView.model[self.node.viewDataKey].next = other.node.viewDataKey;
+                        data.next = other.node.viewDataKey;
                         break;
                     case PortUpdateEventType.Disconnected:
-                        if (graphView.model[self.node.viewDataKey].next == other.viewDataKey)
-                            graphView.model[self.node.viewDataKey].next = null;
+                        if (data.next == other.viewDataKey)
+                            data.next = null;
                         break;
                 }
             });
@@ -98,7 +109,6 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
             return node;
         }
-
         private void BuildNodeContents(ActionGraphView graphView, Node node, ActionGraphGlobalSettings settings, ActionGraphGlobalSettings.ActionInfo info, ActionSchema.Action action, bool clean = false) {
             if (clean) {
                 foreach (var item in node.Query<VisualElement>(null, ActionGraphView.FieldClassName).ToList()) {
@@ -124,29 +134,47 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 method.configType.Value.Decompose((Type type, FieldInfo fieldInfo, string path, TypeDecompositionOptions _) =>
                 {
                     object initialValue;
+                    type = type.GetCustomAttribute<GraphInstanceTypeAttribute>()?.type ?? type;
                     if (properties.TryGetValue(path, out object value)) {
-                        try {
-                            initialValue = Convert.ChangeType(value, type);
+                        if (value is IConvertible) {
+                            try {
+                                initialValue = Convert.ChangeType(value, type);
+                            }
+                            catch (Exception) {
+                                initialValue = Activator.CreateInstance(type);
+                                properties[path] = initialValue;
+                            }
                         }
-                        catch (Exception) {
-                            initialValue = Activator.CreateInstance(type);
-                            properties[path] = initialValue;
+                        else {
+                            initialValue = value;
                         }
                     }
                     else {
                         initialValue = Activator.CreateInstance(type);
                     }
-                    var terminal = schema.CreateField(type, fieldInfo, initialValue, out BindableElement element);
-                    ActionNodeUtility.CreateNodeField(node, info.delegateType, type, fieldInfo, element, path);
-                    if (terminal) {
-                        element.bindingPath = path;
+                    bool terminal;
+                    if (settings.TryGetNodeLayoutHandler(type, out NodeLayoutHandler handler)) {
+                        terminal = handler.HandleLayout(type, fieldInfo, info.delegateType, path, node, initialValue);
                     }
+                    else {
+                        terminal = schema.CreateField(type, fieldInfo, initialValue, out BindableElement element);
+                        ActionNodeUtility.CreateNodeField(node, info.delegateType, type, fieldInfo, element, path);
+                        if (terminal) {
+                            element.bindingPath = path;
+                        }
+                    }
+
+
                     return terminal;
                 }, new TypeDecompositionOptions
                 {
                     exploreChildren = true
                 });
             }
+        }
+
+        public override void RemapGuid(Dictionary<string, string> guidMapping) {
+            ActionNodeUtility.RemapGuid(this, guidMapping);
         }
     }
 }

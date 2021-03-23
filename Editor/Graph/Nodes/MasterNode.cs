@@ -11,6 +11,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public MasterNode() {
             this.viewDataKey = Guid.Empty.ToString("N");
             this.title = "Master";
+            this.AddToClassList(ActionGraphView.MasterNodeClassName);
         }
 
         public void AddModule(ActionModule module) {
@@ -18,7 +19,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             var port = Port.Create<Edge>(Orientation.Horizontal, Direction.Input, Port.Capacity.Multi, CreateActionPortType(settings[module.action].delegateType));
             port.viewDataKey = module.guid;
             port.AddToClassList(MasterNodePortClassName);
-            port.portName = settings[module.action].Name;
+            port.portName = module.name;
             this.capabilities = Capabilities.Collapsible | Capabilities.Movable | Capabilities.Resizable | Capabilities.Selectable;
             port.RegisterCallback<PortUpdateEvent>(evt =>
             {

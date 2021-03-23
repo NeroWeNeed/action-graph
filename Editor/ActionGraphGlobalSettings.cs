@@ -82,6 +82,16 @@ namespace NeroWeNeed.ActionGraph.Editor {
         {
             get => actions.Find(actionInfo => actionInfo.id == id);
         }
+        public bool TryGetNodeLayoutHandler(Type type, out NodeLayoutHandler handler) {
+            if (ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().nodeLayoutHandlers.TryGetValue(type.AssemblyQualifiedName, out SerializableType handlerType)) {
+                handler = (NodeLayoutHandler)Activator.CreateInstance(handlerType.Value);
+                return true;
+            }
+            else {
+                handler = null;
+                return false;
+            }
+        }
         public bool TryGetActionInfo(string name, out ActionInfo actionInfo) {
             actionInfo = default;
             var index = actions.FindIndex(actionInfo => actionInfo.name == name);

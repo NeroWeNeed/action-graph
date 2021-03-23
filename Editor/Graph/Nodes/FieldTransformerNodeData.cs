@@ -4,7 +4,7 @@ using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
-    public class FieldTransformerNodeData : NodeData {
+/*     public class FieldTransformerNodeData : NodeData {
         public string propertyHint;
         public Dictionary<string, object> properties = new Dictionary<string, object>();
 
@@ -13,5 +13,5 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         }
 
         public override ActionAssetModel.Node ToModelNode(Rect layout) => new ActionAssetModel.Node<FieldTransformerNodeData>(this, layout);
-    }
+    } */
 }

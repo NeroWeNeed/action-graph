@@ -22,15 +22,15 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             List<SearchTreeEntry> result = new List<SearchTreeEntry>();
             result.Add(new SearchTreeGroupEntry(new GUIContent("Nodes")));
 
-            if (graphView.modules.Count > 1) {
+            if (graphView.model.context.modules.Count > 1) {
 
-                foreach (var module in graphView.modules) {
+                foreach (var module in graphView.model.context.modules) {
                     result.Add(new SearchTreeGroupEntry(new GUIContent(settings[module.action].Name), 1));
                     CreateSearchTree(result, context, module, settings, 2);
                 }
             }
-            else if (graphView.modules.Count == 1) {
-                CreateSearchTree(result, context, graphView.modules[0], settings, 1);
+            else if (graphView.model.context.modules.Count == 1) {
+                CreateSearchTree(result, context, graphView.model.context.modules[0], settings, 1);
             }
             return result;
         }

@@ -18,7 +18,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             foreach (var connection in port.connections) {
                 var node = connection.output.node;
                 if (guids.Add(node.viewDataKey)) {
-                    bool root = true;
+                    bool root = node.ClassListContains(ActionGraphView.ActionNodeClassName);
+
                     foreach (var inputPort in node.Query<Port>(null, ActionGraphView.CollectablePortClassName).ToList()) {
                         if (inputPort.ClassListContains(ActionGraphView.NodeInputPortClassName) && root) {
                             root = !inputPort.connected;

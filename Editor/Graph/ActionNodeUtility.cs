@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NeroWeNeed.Commons.Editor;
@@ -41,6 +42,27 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             nodePort.portColor = type.GetColor(Color.white);
             return nodePort;
         }
+        public static void RemapGuid<TNodeData>(TNodeData self, Dictionary<string, string> guidMapping) where TNodeData : NodeData, INodeOutput {
+            if (guidMapping.TryGetValue(self.Next, out string newGuid)) {
+                self.Next = newGuid;
+            }
+            else {
+                self.Next = null;
+            }
+        }
+/*         public static void RemapGuids<TNodeData>(TNodeData self, Dictionary<string, string> guidMapping) where TNodeData : NodeData, INodeMultiOutput {
+            var newNext = self.Next.Select(next =>
+            {
+                if (guidMapping.TryGetValue(next, out string newGuid)) {
+                    return newGuid;
+                }
+                else {
+                    return null;
+                }
+            }).Where(next => next != null).ToList();
+            self.Next.Clear();
+            self.Next.AddRange(newNext);
+        } */
         /*         private static void OnPortUpdateWithoutContainer(PortUpdateEvent evt) {
                     var self = (Port)evt.target;
                     var selfNode = self.node;

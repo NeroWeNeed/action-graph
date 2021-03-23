@@ -37,6 +37,7 @@ namespace NeroWeNeed.ActionGraph {
 
     public class ActionIdConverter : JsonConverter<ActionId> {
         public override ActionId ReadJson(JsonReader reader, Type objectType, ActionId existingValue, bool hasExistingValue, JsonSerializer serializer) {
+            
             var value = (string)reader.Value;
             if (hasExistingValue) {
                 existingValue.guid = value;

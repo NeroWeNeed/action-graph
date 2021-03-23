@@ -2,6 +2,23 @@ using System;
 using UnityEngine;
 
 namespace NeroWeNeed.ActionGraph {
+    [AttributeUsage(AttributeTargets.Field)]
+    public sealed class ActionTypeAttribute : Attribute {
+        public string name;
+
+        public ActionTypeAttribute(string name) {
+            this.name = name;
+        }
+    }
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
+    public sealed class GraphInstanceTypeAttribute : Attribute {
+        public Type type;
+
+        public GraphInstanceTypeAttribute(Type type) {
+            this.type = type;
+        }
+    }
+    
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ActionAttribute : Attribute {
         public Type type;

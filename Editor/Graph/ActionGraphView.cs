@@ -21,6 +21,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public const string NodeInputPortClassName = "action-graph-input-node-port";
         public const string NodeOutputPortClassName = "action-graph-output-node-port";
         public const string OutputPortClassName = "action-graph-output-port";
+        public const string NodeConnectionPortClassName = "action-graph-node-connection-port";
         public const string MasterNodePortClassName = "action-graph-master-node-port";
         public const string SilentPortClassName = "action-graph-silent-port";
         public const string ElementContainerClassName = "action-graph-element-container";
@@ -28,10 +29,12 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public const string ContainerClassName = "action-graph-field-container";
         public const string FieldClassName = "action-graph-field";
         public const string VariableIconPath = "Packages/github.neroweneed.action-graph/Editor/Resources/VariableIcon.png";
+        public const string ActionNodeClassName = "action-graph-node--action";
+        public const string VariableNodeClassName = "action-graph-node--variable";
+        public const string MasterNodeClassName = "action-graph-node--master";
 
         private Texture variableIcon;
         public Texture VariableIcon { get => variableIcon ?? AssetDatabase.LoadAssetAtPath<Texture>(VariableIconPath); }
-        public List<ActionModule> modules = new List<ActionModule>();
         public ActionGraphModel model = new ActionGraphModel();
         private SearchWindow searchWindow;
         public static readonly Vector2 DefaultNodeSize = new Vector2(100, 100);
@@ -120,7 +123,6 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public void ClearGraph() {
             this.DeleteElements(this.graphElements.Where(element => !(element is MasterNode)));
             this.model.Clear();
-            this.modules.Clear();
             this.DeleteElements(this.masterNode.Query<Port>(null, MasterNodePortClassName).ToList());
         }
         public bool IsValid() {
@@ -128,7 +130,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
             masterNode.inputContainer.Query<Port>(null, MasterNodePortClassName).ForEach(port =>
             {
-                var moduleIndex = this.modules.FindIndex(m => m.guid == port.viewDataKey);
+                var moduleIndex = this.model.context.modules.FindIndex(m => m.guid == port.viewDataKey);
                 if (moduleIndex < 0)
                     return;
                 moduleNodeCollections[moduleIndex] = new NodeCollection(port);
@@ -136,12 +138,11 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             return IsValid(settings, moduleNodeCollections);
         }
         private bool IsValid(ActionGraphGlobalSettings settings, Dictionary<int, NodeCollection> moduleNodeCollections) {
-            foreach (var node in nodes)
-            {
+            foreach (var node in nodes) {
                 node.ClearNotifications();
             }
             foreach (var moduleNodeCollection in moduleNodeCollections) {
-                var info = settings[modules[moduleNodeCollection.Key].action];
+                var info = settings[model.context.modules[moduleNodeCollection.Key].action];
                 if (info.validatorType.IsCreated && !actionValidationRuleCache[info.validatorType.Value].IsValid(this, moduleNodeCollection.Value)) {
                     return false;
                 }
@@ -156,18 +157,29 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 return;
             var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
             LoadModule(module, settings);
+            model.context.Container = null;
             RefreshNodeConnections();
             inspector.RefreshVariables();
+            inspector.RefreshProperties();
             FrameAll();
-
         }
         public void RefreshNodeConnections() {
             var masterNodeGuid = Guid.Empty.ToString("N");
-            foreach (var containerNodePort in ports.Where(p => p.ClassListContains(OutputPortClassName) && !p.ClassListContains(SilentPortClassName))) {
+            foreach (var containerNodePort in ports.Where(p => p.ClassListContains(NodeConnectionPortClassName) && !p.ClassListContains(SilentPortClassName))) {
                 var containerNode = containerNodePort.node;
                 var containerNodeGuid = containerNode.viewDataKey;
                 var containerNodeData = this.model[containerNodeGuid];
-                var targetNodeGuid = containerNodeData.next;
+                string targetNodeGuid;
+                if (containerNodePort.ClassListContains(OutputPortClassName) && containerNodeData is INodeOutput nodeOutput) {
+                    targetNodeGuid = nodeOutput.Next;
+                }
+                else if (containerNodeData is IPropertyContainer propertyContainer && propertyContainer.Properties.TryGetValue(containerNodePort.viewDataKey, out object property) && property is INodeReference nodeReference) {
+                    
+                    targetNodeGuid = nodeReference.Get();
+                }
+                else {
+                    continue;
+                }
                 var action = model[containerNodeGuid].actionId;
                 if (string.IsNullOrEmpty(targetNodeGuid)) {
                     containerNodePort.DisconnectAll();
@@ -236,7 +248,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             using var evt = ActionGraphValidationRequestEvent.GetPooled(this);
             SendEvent(evt);
         }
-        public void LoadModules(IEnumerable<ActionModule> modules, bool clear = true) {
+        public void LoadModules(IEnumerable<ActionModule> modules, ScriptableObject container = null, bool clear = true) {
             if (clear) {
                 ClearGraph();
             }
@@ -246,13 +258,16 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                     continue;
                 LoadModule(module, settings);
             }
+            model.context.Container = container;
             inspector.RefreshVariables();
+            inspector.RefreshProperties();
             RefreshNodeConnections();
             FrameAll();
         }
+
         private void LoadModule(ActionModule module, ActionGraphGlobalSettings settings) {
 
-            this.modules.Add(module);
+            this.model.context.modules.Add(module);
             masterNode.AddModule(module);
             var model = module.asset.CreateModel();
             if (!this.model.actionInfo.ContainsKey(module.action.guid)) {
@@ -341,7 +356,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             var moduleNodeCollections = new Dictionary<int, NodeCollection>();
             masterNode.inputContainer.Query<Port>(null, MasterNodePortClassName).ForEach(port =>
             {
-                var moduleIndex = this.modules.FindIndex(m => m.guid == port.viewDataKey);
+                var moduleIndex = this.model.context.modules.FindIndex(m => m.guid == port.viewDataKey);
                 if (moduleIndex < 0)
                     return;
                 moduleNodeCollections[moduleIndex] = new NodeCollection(port);
@@ -350,7 +365,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 return;
             }
             foreach (var moduleNodeSet in moduleNodeCollections) {
-                Save(moduleNodeSet.Value, modules[moduleNodeSet.Key], settings);
+                Save(moduleNodeSet.Value, model.context.modules[moduleNodeSet.Key], settings);
             }
         }
         public void Save(NodeCollection nodes, ActionModule module, ActionGraphGlobalSettings settings) {
@@ -366,14 +381,16 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 })
             };
             var jsonSettings = JsonConvert.DefaultSettings.Invoke();
+
             jsonSettings.TypeNameHandling = TypeNameHandling.All;
             var path = AssetDatabase.GetAssetPath(module.asset);
             if (string.IsNullOrEmpty(path)) {
-                //TODO: Save File Prompt
+                path = EditorUtility.SaveFilePanelInProject($"Save Action Asset {module.name} as...", settings[module.action].Name, ActionGraphGlobalSettings.Extension, string.Empty);
+                if (string.IsNullOrEmpty(path)) {
+                    return;
+                }
             }
-            else {
-                File.WriteAllText(path, JsonConvert.SerializeObject(model, jsonSettings));
-            }
+            File.WriteAllText(path, JsonConvert.SerializeObject(model, jsonSettings));
             AssetDatabase.ImportAsset(path);
         }
         private string SerializeElements(IEnumerable<GraphElement> elements) {

@@ -12,6 +12,8 @@ using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
     public class ActionGraphModel {
+
+        public ContextInfo context = new ContextInfo();
         public Dictionary<string, NodeData> nodes = new Dictionary<string, NodeData>();
         public Dictionary<string, ActionInfo> actionInfo = new Dictionary<string, ActionInfo>();
         public TData GetData<TData>(string guid) where TData : NodeData => (TData)nodes[guid];
@@ -23,6 +25,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public void Clear() {
             this.nodes.Clear();
             this.actionInfo.Clear();
+            this.context.Clear();
         }
 
 
@@ -39,17 +42,47 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             public SerializableType type;
             public Dictionary<string, VariableInfo> variables;
         }
+
     }
     [Serializable]
     public struct ActionModule {
         public ActionAsset asset;
         public ActionId action;
         public string guid;
+        public string name;
 
-        public ActionModule(ActionAsset asset) {
+        public ActionModule(ActionAsset asset,string name) {
             this.asset = asset;
             this.action = asset.actionId;
             this.guid = Guid.NewGuid().ToString("N");
+            this.name = name;
+        }
+    }
+    [Serializable]
+    public class ContextInfo {
+        public string containerGuid;
+        [JsonIgnore]
+        private ScriptableObject container;
+        [JsonIgnore]
+        public ScriptableObject Container
+        {
+            get
+            {
+                if (container == null && !string.IsNullOrWhiteSpace(containerGuid)) {
+                    container = AssetDatabase.LoadAssetAtPath<ScriptableObject>(AssetDatabase.GUIDToAssetPath(containerGuid));
+                }
+                return container;
+            }
+            set
+            {
+                container = value;
+                containerGuid = value == null ? null : AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(value));
+            }
+        }
+        public List<ActionModule> modules = new List<ActionModule>();
+        public void Clear() {
+            containerGuid = null;
+            modules.Clear();
         }
     }
 
@@ -62,6 +95,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 target.asset = AssetDatabase.LoadAssetAtPath<ActionAsset>(AssetDatabase.GUIDToAssetPath(obj[nameof(ActionModule.asset)].Value<string>()));
                 target.guid = obj[nameof(ActionModule.guid)].Value<string>();
                 target.action = target.asset.actionId;
+                target.name = obj[nameof(ActionModule.name)].Value<string>();
                 return target;
             }
             else {
@@ -76,6 +110,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             writer.WriteValue(string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.GUIDFromAssetPath(assetPath).ToString());
             writer.WritePropertyName(nameof(ActionModule.guid));
             writer.WriteValue(value.guid);
+            writer.WritePropertyName(nameof(ActionModule.name));
+            writer.WriteValue(value.name);
             writer.WriteEndObject();
         }
     }

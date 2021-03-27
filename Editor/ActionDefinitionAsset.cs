@@ -8,7 +8,7 @@ using NeroWeNeed.Commons.Editor;
 using UnityEditor;
 using UnityEngine;
 namespace NeroWeNeed.ActionGraph.Editor {
-    
+
 
     [CreateAssetMenu(fileName = "ActionDefinitionAsset", menuName = "Actions/Action Definition Asset", order = 0)]
     public class ActionDefinitionAsset : ScriptableObject {
@@ -22,10 +22,10 @@ namespace NeroWeNeed.ActionGraph.Editor {
         }
         [HideInInspector]
         public ActionId id = ActionId.Create();
-        [Delayed]
-        public new string name;
+
+        public string displayName;
         public string associatedDirectory;
-        public string Name { get => string.IsNullOrEmpty(name) ? delegateType.Value?.Name : name; }
+        public string Name { get => string.IsNullOrEmpty(displayName) ? delegateType.Value?.Name : displayName; }
         [SuperTypeFilter(typeof(Delegate))]
         [ConcreteTypeFilter]
         public SerializableType delegateType;
@@ -38,6 +38,9 @@ namespace NeroWeNeed.ActionGraph.Editor {
         public bool useFieldTransformers = true;
         [HideInInspector]
         public bool recreateActionList = true;
+        [Provider(typeof(ActionReturnTypeAggregatorProvider))]
+        public SerializableMethod aggregator;
+
         [HideInInspector]
         private List<Action> actions = new List<Action>();
         public List<Action> GetActions() {
@@ -46,6 +49,14 @@ namespace NeroWeNeed.ActionGraph.Editor {
 
             }
             return actions;
+        }
+        public Dictionary<string, ActionArgumentComponentSchema.ActionArgumentComponent> GetComponents() {
+            if (ProjectUtility.GetOrCreateProjectAsset<ActionArgumentComponentSchema>().data.TryGetValue(delegateType.Value, out var value)) {
+                return value;
+            }
+            else {
+                return null;
+            }
         }
         public void RecreateActionList() {
             var schema = ProjectUtility.GetProjectAsset<ActionSchema>();
@@ -57,11 +68,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
         }
         private void OnValidate() {
-            if (string.IsNullOrWhiteSpace(name)) {
-                name = $"Action({id})";
+            if (string.IsNullOrWhiteSpace(displayName)) {
+                displayName = $"Action({id})";
             }
             if (string.IsNullOrWhiteSpace(associatedDirectory)) {
-                associatedDirectory = $"Assets/Actions/{name}";
+                associatedDirectory = $"Assets/Actions/{displayName}";
             }
             if (associatedDirectory.EndsWith("/")) {
                 associatedDirectory = associatedDirectory.Substring(0, associatedDirectory.Length - 1);

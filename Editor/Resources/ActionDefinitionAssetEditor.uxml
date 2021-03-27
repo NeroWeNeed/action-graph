@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="content" style="flex-grow: 1;">
+        <uie:PropertyField binding-path="id" enabled="false"/>
+        <uie:PropertyField binding-path="displayName" />
+        <uie:PropertyField binding-path="associatedDirectory" />
+        <uie:PropertyField binding-path="delegateType"/>
+        <uie:PropertyField binding-path="variableType" />
+        <uie:PropertyField binding-path="validatorType" />
+        <uie:PropertyField binding-path="useFieldTransformers" />
+        <ui:VisualElement name="aggregator-container"/>
+    </ui:VisualElement>
+</ui:UXML>

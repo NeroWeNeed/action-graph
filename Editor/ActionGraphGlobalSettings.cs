@@ -74,7 +74,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
 
         public bool TryGetActionInfo(string name, out ActionDefinitionAsset actionInfo) {
             actionInfo = default;
-            var index = actions.FindIndex(actionInfo => actionInfo.name == name);
+            var index = actions.FindIndex(actionInfo => actionInfo.displayName == name);
             if (index < 0) {
                 return false;
             }
@@ -119,8 +119,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
         private void OnValidate() {
             var names = new HashSet<string>();
             foreach (var action in actions) {
-                if (!names.Add(action.name)) {
-                    Debug.LogError($"Duplicate Action Found: {action.name}.");
+                if (!names.Add(action.displayName)) {
+                    Debug.LogError($"Duplicate Action Found: {action.displayName}.");
                 }
             }
             if (string.IsNullOrWhiteSpace(temporaryDirectory)) {

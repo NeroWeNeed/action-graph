@@ -28,7 +28,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             var action = asset.actions.FirstOrDefault(a => a.id.guid == choice);
             if (action == null)
                 return ActionId.UnknownActionName;
-            return string.IsNullOrEmpty(action.name) ? action.delegateType.Value.Name : action.name;
+            return string.IsNullOrEmpty(action.displayName) ? action.delegateType.Value.Name : action.displayName;
         }
 
     }

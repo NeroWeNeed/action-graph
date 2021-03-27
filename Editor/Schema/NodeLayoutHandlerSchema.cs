@@ -14,7 +14,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Schema {
     public class NodeLayoutHandlerSchema : IInitializable {
 
         [JsonProperty("data")]
-        public Dictionary<string, Dictionary<string, SerializableType>> assemblyData = new Dictionary<string, Dictionary<string, SerializableType>>();
+        internal Dictionary<string, Dictionary<string, SerializableType>> assemblyData = new Dictionary<string, Dictionary<string, SerializableType>>();
         [JsonIgnore]
         public DictionaryView<string, Dictionary<string, SerializableType>, Type, Lazy<NodeLayoutHandler>> data;
 

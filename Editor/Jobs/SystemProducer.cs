@@ -60,26 +60,43 @@ namespace NeroWeNeed.ActionGraph.Editor {
 
             return methodDefinition;
         }
-        private static void GenerateILOnCreate<TDelegate>(ModuleDefinition moduleDefinition, ILProcessor processor, bool hasVariable, bool hasReturn, Type variableType, Type returnType, FieldDefinition queryField) where TDelegate : Delegate {
+        private static void GenerateILOnCreate<TDelegate>(ActionDefinitionAsset actionDefinition, ModuleDefinition moduleDefinition, ILProcessor processor, bool hasVariable, bool hasReturn, Type variableType, Type returnType, FieldDefinition queryField) where TDelegate : Delegate {
             var componentTypeReference = moduleDefinition.ImportReference(typeof(ComponentType));
+            var components = actionDefinition.GetComponents();
+            var queryComponentCount = 1;
+            if (hasVariable)
+                queryComponentCount++;
+            if (hasReturn)
+                queryComponentCount++;
+            if (components != null) {
+                queryComponentCount += components.Count;
+            }
             processor.Emit(OpCodes.Nop);
             processor.Emit(OpCodes.Ldarg_0);
             processor.Emit(OpCodes.Ldarg_1);
-            processor.Emit(hasVariable && hasReturn ? OpCodes.Ldc_I4_3 : (hasVariable || hasReturn ? OpCodes.Ldc_I4_2 : OpCodes.Ldc_I4_1));
-            
+            processor.Emit(OpCodes.Ldc_I4, queryComponentCount); ;
             processor.Emit(OpCodes.Newarr, componentTypeReference);
             processor.Emit(OpCodes.Ldc_I4_0);
             processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetMethod(nameof(ComponentType.ReadOnly)).MakeGenericMethod(typeof(ActionExecutionRequest<TDelegate>))));
             processor.Emit(OpCodes.Stelem_Any, componentTypeReference);
+            int offset = 1;
             if (hasVariable) {
-                processor.Emit(OpCodes.Ldc_I4_1);
+                processor.Emit(OpCodes.Ldc_I4, offset++);
                 processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetMethod(nameof(ComponentType.ReadOnly)).MakeGenericMethod(typeof(ActionVariable<,>).MakeGenericType(typeof(TDelegate), variableType))));
                 processor.Emit(OpCodes.Stelem_Any, componentTypeReference);
             }
             if (hasReturn) {
-                processor.Emit(OpCodes.Ldc_I4_2);
+                processor.Emit(OpCodes.Ldc_I4, offset++);
                 processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetMethod(nameof(ComponentType.ReadWrite)).MakeGenericMethod(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType))));
                 processor.Emit(OpCodes.Stelem_Any, componentTypeReference);
+            }
+            if (components != null) {
+                foreach (var component in components)
+                {
+                    processor.Emit(OpCodes.Ldc_I4, offset++);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetMethod(nameof(ComponentType.ReadOnly)).MakeGenericMethod(component.Value.componentType)));
+                    processor.Emit(OpCodes.Stelem_Any, componentTypeReference);
+                }
             }
             processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetEntityQuery))));
             processor.Emit(OpCodes.Stfld, queryField);

@@ -75,6 +75,7 @@ namespace NeroWeNeed.ActionGraph {
             this.type = type;
         }
     }
+    
     public enum NodeLayout {
         Input, Output, Extension
     }

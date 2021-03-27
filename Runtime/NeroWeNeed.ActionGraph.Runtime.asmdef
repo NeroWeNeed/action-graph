@@ -2,7 +2,11 @@
     "name": "NeroWeNeed.ActionGraph.Runtime",
     "rootNamespace": "",
     "references": [
-        "GUID:4e4a10f31e908ca46a41e81cad616cbc"
+        "GUID:4e4a10f31e908ca46a41e81cad616cbc",
+        "GUID:734d92eba21c94caba915361bd5ac177",
+        "GUID:2665a8d13d1b3f18800f46e256720795",
+        "GUID:8a2eafa29b15f444eb6d74f94a930e1d",
+        "GUID:e0cd26848372d4e5c891c569017e11f1"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

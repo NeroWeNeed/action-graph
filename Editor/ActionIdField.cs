@@ -28,11 +28,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
         }
         private static List<ActionId> GetItems() {
-            var items = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>().Select(info =>
-            {
-                Debug.Log(info);
-                return info.id;
-            }).ToList();
+            var items = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>().Select(info => info.id).ToList();
             items.Insert(0, default);
             return items;
         }

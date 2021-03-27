@@ -276,7 +276,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 var variables = new Dictionary<string, ActionGraphModel.VariableInfo>();
                 if (variableType.IsCreated) {
 
-                    variableType.Value.Decompose((type, fieldInfo, path, options) =>
+                    variableType.Value.Decompose((type, fieldInfo,parent, path,parentPath, options) =>
                     {
                         variables[path] = new ActionGraphModel.VariableInfo
                         {

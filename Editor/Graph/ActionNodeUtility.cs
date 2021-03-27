@@ -50,19 +50,19 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 self.Next = null;
             }
         }
-/*         public static void RemapGuids<TNodeData>(TNodeData self, Dictionary<string, string> guidMapping) where TNodeData : NodeData, INodeMultiOutput {
-            var newNext = self.Next.Select(next =>
-            {
-                if (guidMapping.TryGetValue(next, out string newGuid)) {
-                    return newGuid;
-                }
-                else {
-                    return null;
-                }
-            }).Where(next => next != null).ToList();
-            self.Next.Clear();
-            self.Next.AddRange(newNext);
-        } */
+        /*         public static void RemapGuids<TNodeData>(TNodeData self, Dictionary<string, string> guidMapping) where TNodeData : NodeData, INodeMultiOutput {
+                    var newNext = self.Next.Select(next =>
+                    {
+                        if (guidMapping.TryGetValue(next, out string newGuid)) {
+                            return newGuid;
+                        }
+                        else {
+                            return null;
+                        }
+                    }).Where(next => next != null).ToList();
+                    self.Next.Clear();
+                    self.Next.AddRange(newNext);
+                } */
         /*         private static void OnPortUpdateWithoutContainer(PortUpdateEvent evt) {
                     var self = (Port)evt.target;
                     var selfNode = self.node;

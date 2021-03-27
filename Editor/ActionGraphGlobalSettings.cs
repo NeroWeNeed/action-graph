@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Mono.Cecil;
+using NeroWeNeed.ActionGraph.Editor.Schema;
 using NeroWeNeed.Commons;
 using NeroWeNeed.Commons.Editor;
 using NeroWeNeed.Commons.Editor.UIToolkit;
@@ -18,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor {
-    public class ActionGraphGlobalSettings : ProjectGlobalSettings, IInitializationCallback, IEnumerable<ActionDefinitionAsset> {
+    public class ActionGraphGlobalSettings : ProjectGlobalSettings, IInitializable, IEnumerable<ActionDefinitionAsset> {
         public const string Uxml = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphGlobalSettings.uxml";
         public const string Uss = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphGlobalSettings.uss";
         public const string DefaultTempDirectory = "Assets/Temp/ActionGraph";
@@ -60,26 +61,15 @@ namespace NeroWeNeed.ActionGraph.Editor {
 
         public ActionSchema.Action GetAction(ActionId actionId, string identifier) {
             var actionInfo = this[actionId];
-            return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().actions[actionInfo.delegateType].actions[identifier];
+            return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().data[actionInfo.delegateType][identifier];
         }
         public IEnumerable<ActionSchema.Action> GetActions(ActionId actionId) {
             var actionInfo = this[actionId];
-            return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().actions[actionInfo.delegateType].actions.Values;
+            return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().data[actionInfo.delegateType].Values;
         }
         public ActionDefinitionAsset this[ActionId id]
         {
             get => actions.Find(actionInfo => actionInfo.id == id);
-        }
-
-        public bool TryGetNodeLayoutHandler(Type type, out NodeLayoutHandler handler) {
-            if (ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().nodeLayoutHandlers.TryGetValue(type.AssemblyQualifiedName, out SerializableType handlerType)) {
-                handler = (NodeLayoutHandler)Activator.CreateInstance(handlerType.Value);
-                return true;
-            }
-            else {
-                handler = null;
-                return false;
-            }
         }
 
         public bool TryGetActionInfo(string name, out ActionDefinitionAsset actionInfo) {

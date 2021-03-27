@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using NeroWeNeed.ActionGraph.Editor.Schema;
 using NeroWeNeed.Commons.Editor;
 using Newtonsoft.Json;
 using UnityEditor.Experimental.GraphView;
@@ -22,7 +23,9 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public override ActionAssetModel.Node ToModelNode(Rect layout) => new ActionAssetModel.Node<ActionNodeData>(this, layout);
         public override GraphElement CreateNode(ActionGraphView graphView, ActionGraphGlobalSettings settings, Rect layout, string guid = null) {
             var info = settings[actionId];
-            var nodeInfo = settings.GetAction(actionId, identifier);
+            var actionSchema = ProjectUtility.GetOrCreateProjectAsset<ActionSchema>();
+            //var nodeInfo = settings.GetAction(actionId, identifier);
+            var nodeInfo = actionSchema.data[info.delegateType][identifier];
             if (string.IsNullOrEmpty(guid))
                 guid = Guid.NewGuid().ToString("N");
             var node = new Node()
@@ -41,7 +44,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             node.inputContainer.Add(inputPort);
             var outputPort = Port.Create<Edge>(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, ActionGraphView.CreateActionPortType(info.delegateType));
             outputPort.portName = "out";
-            
+
             outputPort.portColor = info.delegateType.Value.GetColor(Color.white);
             outputPort.AddToClassList(ActionGraphView.NodePortClassName);
             outputPort.AddToClassList(ActionGraphView.NodeOutputPortClassName);
@@ -134,7 +137,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             var schema = ProjectUtility.GetOrCreateProjectAsset<TypeFieldSchema>();
             var method = string.IsNullOrEmpty(subIdentifier) ? action.GetDefaultMethod() : action.methods[subIdentifier];
             if (method.configType.IsCreated) {
-                method.configType.Value.Decompose((Type type, FieldInfo fieldInfo, string path, TypeDecompositionOptions _) =>
+                method.configType.Value.Decompose((Type type, FieldInfo fieldInfo, FieldInfo parentFieldInfo, string path, string parentPath, TypeDecompositionOptions _) =>
                 {
                     object initialValue;
                     type = type.GetCustomAttribute<GraphInstanceTypeAttribute>()?.type ?? type;
@@ -156,8 +159,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                         initialValue = Activator.CreateInstance(type);
                     }
                     bool terminal;
-                    if (settings.TryGetNodeLayoutHandler(type, out NodeLayoutHandler handler)) {
-                        terminal = handler.HandleLayout(type, fieldInfo, info.delegateType, path, node, initialValue);
+                    if (ProjectUtility.GetOrCreateProjectAsset<NodeLayoutHandlerSchema>().data.TryGetValue(type, out var handler)) {
+                        terminal = handler.Value.HandleLayout(type, fieldInfo, info.delegateType, path, node, initialValue);
                     }
                     else {
                         terminal = schema.CreateField(type, fieldInfo, initialValue, out BindableElement element);

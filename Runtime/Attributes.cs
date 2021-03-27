@@ -1,7 +1,23 @@
 using System;
 using UnityEngine;
 
+
 namespace NeroWeNeed.ActionGraph {
+
+    [AttributeUsage(AttributeTargets.Parameter)]
+    public sealed class SingletonArgumentAttribute : Attribute {
+
+    }
+    [AttributeUsage(AttributeTargets.Struct)]
+    public sealed class ActionArgumentAttribute : Attribute {
+        public Type action;
+        public string parameterName;
+
+        public ActionArgumentAttribute(Type action, string parameterName) {
+            this.action = action;
+            this.parameterName = parameterName;
+        }
+    }
     [AttributeUsage(AttributeTargets.Field)]
     public sealed class ActionTypeAttribute : Attribute {
         public string name;
@@ -18,7 +34,7 @@ namespace NeroWeNeed.ActionGraph {
             this.type = type;
         }
     }
-    
+
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ActionAttribute : Attribute {
         public Type type;

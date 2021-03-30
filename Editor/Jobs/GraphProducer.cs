@@ -100,7 +100,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                         WriteTypeless(configData, configOffset, value);
                     }
                 }
-                nodeArray[node.Value.index] = new BlobGraph<TDelegate>.Node
+                nodeArray[node.Value.index] = new BlobGraphNode
                 {
                     id = actions.FindIndex(a => a.identifier == node.Value.data.identifier && a.subIdentifier == node.Value.data.subIdentifier),
                     configOffset = configOffset,
@@ -129,7 +129,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             var variableIndex = 0;
             foreach (var variable in variables) {
                 var node = nodes[variable.Value.Next];
-                variableArray[variableIndex++] = new BlobGraph<TDelegate>.Variable
+                variableArray[variableIndex++] = new BlobGraphVariable
                 {
                     variableOffset = variablePathMap[variable.Value.path].offset,
                     variableLength = variablePathMap[variable.Value.path].length,

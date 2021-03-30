@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Mono.Cecil.Rocks;
 using NeroWeNeed.Commons.Editor;
 using Unity.Burst;
 using Unity.Collections;
@@ -158,7 +159,13 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     public Type parameterType;
                     public VariableDefinition variableCurrent;
                 }
-
+                public Type returnType;
+                public Type returnTypeComponent;
+                public TypeReference returnTypeComponentTypeHandleReference;
+                TypeReference returnTypeComponentReference;
+                public bool HasReturnType { get => returnType != typeof(void); }
+                public MethodReference returnTypeAggregator;
+                public bool HasReturnTypeAggregator { get => returnTypeAggregator != null; }
                 public TypeDefinition definition;
                 public FieldDefinition requestHandleField;
                 public FieldDefinition entityHandleField;
@@ -177,6 +184,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     definition.Interfaces.Add(new InterfaceImplementation(moduleDefinition.ImportReference(typeof(IJobEntityBatch))));
                     //definition.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(BurstCompileAttribute).GetConstructor(Type.EmptyTypes))));
                     var readOnlyAttributeReference = moduleDefinition.ImportReference(typeof(ReadOnlyAttribute).GetConstructor(Type.EmptyTypes));
+                    this.returnType = typeof(TDelegate).GetMethod("Invoke").ReturnType;
+                    this.returnTypeAggregator = actionDefinitionAsset.aggregator.IsCreated ? moduleDefinition.ImportReference(actionDefinitionAsset.aggregator.Value) : null;
                     requestHandleField = new FieldDefinition("requestHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(typeof(ActionExecutionRequest<TDelegate>))));
                     requestHandleField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(requestHandleField);
@@ -194,8 +203,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     definition.Fields.Add(actionIndexField);
                     nodeQueueField = new FieldDefinition("nodeQueue", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(NativeQueue<int>)));
                     definition.Fields.Add(nodeQueueField);
-                    if (typeof(TDelegate).GetMethod("Invoke").ReturnType != typeof(void)) {
-                        returnHandleField = new FieldDefinition("returnHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), typeof(TDelegate).GetMethod("Invoke").ReturnType))));
+                    if (HasReturnType && HasReturnTypeAggregator) {
+                        returnTypeComponent = typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType);
+                        returnTypeComponentReference = moduleDefinition.ImportReference(returnTypeComponent);
+                        returnTypeComponentTypeHandleReference = moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(returnTypeComponent));
+                        returnHandleField = new FieldDefinition("returnHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(returnTypeComponentTypeHandleReference));
                         definition.Fields.Add(returnHandleField);
                     }
                     var components = actionDefinitionAsset.GetComponents();
@@ -240,10 +252,10 @@ namespace NeroWeNeed.ActionGraph.Editor {
                             };
                         }
                     }).ToList();
-                    GenerateExecute(moduleDefinition);
+                    GenerateExecute(moduleDefinition, actionDefinitionAsset);
                 }
 
-                private void GenerateExecute(ModuleDefinition moduleDefinition) {
+                private void GenerateExecute(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
 
                     //Type References
                     var nativeArray_entity = moduleDefinition.ImportReference(typeof(NativeArray<Entity>));
@@ -259,6 +271,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     var blobArray_blobGraphNode = moduleDefinition.ImportReference(typeof(BlobArray<BlobGraphNode>));
                     var configInfo = moduleDefinition.ImportReference(typeof(ConfigInfo));
                     var configHandle = moduleDefinition.ImportReference(typeof(ConfigDataHandle));
+
                     //Method References
                     var nativeArray_actionExecutionRequest_length = moduleDefinition.ImportReference(typeof(NativeArray<ActionExecutionRequest<TDelegate>>).GetProperty(nameof(NativeArray<ActionExecutionRequest<TDelegate>>.Length)).GetMethod);
                     var nativeArray_actionExecutionRequest_item = moduleDefinition.ImportReference(typeof(NativeArray<ActionExecutionRequest<TDelegate>>).GetProperty("Item").GetMethod);
@@ -277,6 +290,15 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     var actionIndex_item = moduleDefinition.ImportReference(typeof(ActionIndex<TDelegate>).GetProperty("Item").GetMethod);
                     var archetypeChunk_getNativeArray_entityTypeHandle = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethod(nameof(ArchetypeChunk.GetNativeArray), new Type[] { typeof(EntityTypeHandle) }));
                     var archetypeChunk_getNativeArray = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethods(BindingFlags.Public | BindingFlags.Instance).First(m => m.Name == nameof(ArchetypeChunk.GetNativeArray) && m.IsGenericMethod).MakeGenericMethod(typeof(ActionExecutionRequest<TDelegate>)));
+                    MethodReference archetypeChunk_getNativeArray_returnTypeHandle = null;
+                    MethodReference nativeArray_return_item_set = null;
+                    if (HasReturnType && HasReturnTypeAggregator) {
+                        var resultType = typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType);
+                        archetypeChunk_getNativeArray_returnTypeHandle = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethods(BindingFlags.Public | BindingFlags.Instance).First(m => m.Name == nameof(ArchetypeChunk.GetNativeArray) && m.IsGenericMethod).MakeGenericMethod(resultType));
+                        nativeArray_return_item_set = moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(resultType).GetProperty("Item").SetMethod);
+                    }
+
+
                     var blobArray_int_length = moduleDefinition.ImportReference(typeof(BlobArray<int>).GetProperty(nameof(BlobArray<int>.Length)).GetMethod);
                     var blobArray_int_item = moduleDefinition.ImportReference(typeof(BlobArray<int>).GetProperty("Item").GetMethod);
                     var blobArray_blobGraphNode_item = moduleDefinition.ImportReference(typeof(BlobArray<BlobGraphNode>).GetProperty("Item").GetMethod);
@@ -292,6 +314,10 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     var actionExecutionRequest_value = moduleDefinition.ImportReference(typeof(ActionExecutionRequest<TDelegate>).GetField(nameof(ActionExecutionRequest<TDelegate>.value)));
                     var configHandle_handle = moduleDefinition.ImportReference(typeof(ConfigInfo).GetField(nameof(ConfigInfo.handle)));
                     var configHandle_length = moduleDefinition.ImportReference(typeof(ConfigInfo).GetField(nameof(ConfigInfo.length)));
+                    FieldReference return_value = null;
+                    if (HasReturnType && HasReturnTypeAggregator) {
+                        return_value = moduleDefinition.ImportReference(returnTypeComponent.GetField("value"));
+                    }
 
                     //Method Definition
                     executeMethod = new MethodDefinition(nameof(IJobEntityBatch.Execute), Mono.Cecil.MethodAttributes.Public, moduleDefinition.ImportReference(typeof(void)));
@@ -303,8 +329,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     executeMethod.Parameters.Add(batchIndex);
                     definition.Methods.Add(executeMethod);
                     executeMethod.Body.InitLocals = true;
+                    executeMethod.Body.SimplifyMacros();
                     var processor = executeMethod.Body.GetILProcessor();
-
                     //Variables
                     var var0 = new VariableDefinition(nativeArray_actionExecutionRequest);
                     var var1 = new VariableDefinition(nativeArray_entity);
@@ -321,14 +347,20 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     var var12 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
                     var var13 = new VariableDefinition(moduleDefinition.ImportReference(typeof(FunctionPointer<TDelegate>)));
                     var var14 = new VariableDefinition(moduleDefinition.ImportReference(typeof(ConfigInfo)));
+                    var var15 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
 
 
 
                     VariableDefinition returnVar = null;
-                    var returnType = typeof(TDelegate).GetMethod("Invoke").ReturnType;
-                    if (returnType != typeof(void)) {
+                    VariableDefinition returnVarSource = null;
+                    VariableDefinition returnVarComponent = null;
+                    if (HasReturnType && HasReturnTypeAggregator) {
                         returnVar = new VariableDefinition(moduleDefinition.ImportReference(returnType));
+                        returnVarComponent = new VariableDefinition(moduleDefinition.ImportReference(returnTypeComponent));
+                        returnVarSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType))));
+
                     }
+
 
                     executeMethod.Body.Variables.Add(var0);
                     executeMethod.Body.Variables.Add(var1);
@@ -345,6 +377,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     executeMethod.Body.Variables.Add(var12);
                     executeMethod.Body.Variables.Add(var13);
                     executeMethod.Body.Variables.Add(var14);
+                    executeMethod.Body.Variables.Add(var15);
 
                     foreach (var parameter in actionParameterFields) {
                         if (parameter.variableSource != null) {
@@ -353,8 +386,10 @@ namespace NeroWeNeed.ActionGraph.Editor {
                         executeMethod.Body.Variables.Add(parameter.variableCurrent);
                     }
 
-                    if (returnType != typeof(void)) {
+                    if (HasReturnType && HasReturnTypeAggregator) {
                         executeMethod.Body.Variables.Add(returnVar);
+                        executeMethod.Body.Variables.Add(returnVarComponent);
+                        executeMethod.Body.Variables.Add(returnVarSource);
                     }
 
 
@@ -368,7 +403,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     var bl_00b3 = processor.Create(OpCodes.Ldloc_S, var6);
                     var bl_008b = processor.Create(OpCodes.Nop);
                     var bl_00d1 = processor.Create(OpCodes.Nop);
-                    
+
                     var bl_0024 = processor.Create(OpCodes.Nop);
 
                     processor.Emit(OpCodes.Nop);
@@ -384,6 +419,13 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Ldfld, entityHandleField);
                     processor.Emit(OpCodes.Call, archetypeChunk_getNativeArray_entityTypeHandle);
                     processor.Emit(OpCodes.Stloc_1);
+                    if (HasReturnType && HasReturnTypeAggregator) {
+                        processor.Emit(OpCodes.Ldarga_S, batchInChunk);
+                        processor.Emit(OpCodes.Ldarg_0);
+                        processor.Emit(OpCodes.Ldfld, returnHandleField);
+                        processor.Emit(OpCodes.Call, archetypeChunk_getNativeArray_returnTypeHandle);
+                        processor.Emit(OpCodes.Stloc_S, returnVarSource);
+                    }
                     //Parameter Native Arrays
                     var parameterNativeArrayGetter = typeof(ArchetypeChunk).GetGenericMethod(nameof(ArchetypeChunk.GetNativeArray), BindingFlags.Public | BindingFlags.Instance);
                     foreach (var parameterInfo in actionParameterFields.Where(p => p.fieldDefinition != null)) {
@@ -404,6 +446,9 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Call, nativeArray_actionExecutionRequest_item);
                     processor.Emit(OpCodes.Ldfld, actionExecutionRequest_value);
                     processor.Emit(OpCodes.Stloc_3);
+                    //Set flag
+                    processor.Emit(OpCodes.Ldc_I4_1);
+                    processor.Emit(OpCodes.Stloc, var15);
                     //Get Parameters
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, configHandlesField);
@@ -448,7 +493,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Call, componentDataFromEntity_actionExecutionRequestAt_hasComponent);
                     processor.Emit(OpCodes.Stloc_S, var5);
                     processor.Emit(OpCodes.Ldloc_S, var5);
-                    processor.Emit(OpCodes.Brfalse_S, bl_0085);
+                    processor.Emit(OpCodes.Brfalse, bl_0085);
                     // nodeQueue.Enqueue(requestAtData[nativeArray2[i]].startIndex);
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Ldarg_0);
@@ -463,12 +508,12 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Call, nativeQueue_int_enqueue);
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Nop);
-                    processor.Emit(OpCodes.Br_S, bl_00cf);
+                    processor.Emit(OpCodes.Br, bl_00cf);
                     // for (int j = 0; j < value.Value.roots.Length; j++)
                     processor.Append(bl_0085);
                     processor.Emit(OpCodes.Ldc_I4_0);
                     processor.Emit(OpCodes.Stloc_S, var6);
-                    processor.Emit(OpCodes.Br_S, bl_00b3);
+                    processor.Emit(OpCodes.Br, bl_00b3);
                     // nodeQueue.Enqueue(value.Value.roots[j]);
                     processor.Append(bl_008b);
                     processor.Emit(OpCodes.Ldarg_0);
@@ -500,9 +545,9 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Nop);
                     processor.Append(bl_00cf);
 
-                    
+
                     processor.Append(bl_00d1);
-                    
+
                     processor.Emit(OpCodes.Ldloca_S, var3);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_nodes);
@@ -519,15 +564,25 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Call, actionIndex_item);
                     processor.Emit(OpCodes.Stloc_S, var13);
                     //Call
-
+                    if (HasReturnType && HasReturnTypeAggregator) {
+                        //processor.Emit(OpCodes.Ldloc_S, returnVar);
+                    }
                     processor.Emit(OpCodes.Ldloca_S, var13);
                     processor.Emit(OpCodes.Call, functionPointer_invoke);
                     foreach (var item in actionParameterFields) {
                         processor.Emit(OpCodes.Ldloca_S, item.variableCurrent);
                     }
                     processor.Emit(OpCodes.Callvirt, moduleDefinition.ImportReference(typeof(TDelegate).GetMethod("Invoke")));
-                    if (returnVar != null) {
-                        processor.Emit(OpCodes.Stloc_S, returnVar);
+                    if (HasReturnType) {
+                        if (HasReturnTypeAggregator) {
+
+                            processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(returnTypeAggregator));
+                            processor.Emit(OpCodes.Stloc_S, returnVar);
+                            
+                        }
+                        else {
+                            processor.Emit(OpCodes.Pop);
+                        }
                     }
                     processor.Emit(OpCodes.Nop);
 
@@ -540,7 +595,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Ceq);
                     processor.Emit(OpCodes.Stloc_S, var10);
                     processor.Emit(OpCodes.Ldloc_S, var10);
-                    processor.Emit(OpCodes.Brfalse_S, bl_0131);
+                    processor.Emit(OpCodes.Brfalse, bl_0131);
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
@@ -557,8 +612,22 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Ceq);
                     processor.Emit(OpCodes.Stloc_S, var11);
                     processor.Emit(OpCodes.Ldloc_S, var11);
-                    
-                    processor.Emit(OpCodes.Brtrue_S, bl_00d1);
+                    processor.Emit(OpCodes.Brtrue, bl_00d1);
+                    //Update result
+                    if (HasReturnType && HasReturnTypeAggregator) {
+                        processor.Emit(OpCodes.Ldloca_S, returnVarSource);
+                        processor.Emit(OpCodes.Ldloc_2);
+                        processor.Emit(OpCodes.Ldloca_S, returnVarComponent);
+                        processor.Emit(OpCodes.Initobj, returnTypeComponentReference);
+                        processor.Emit(OpCodes.Ldloca_S, returnVarComponent);
+                        processor.Emit(OpCodes.Ldloca_S, returnVar);
+                        processor.Emit(OpCodes.Stfld, return_value);
+                        processor.Emit(OpCodes.Ldloc_S, returnVarComponent);
+                        processor.Emit(OpCodes.Call, nativeArray_return_item_set);
+                    }
+
+
+
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Nop);
                     processor.Append(bl_0153);
@@ -574,7 +643,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Ldloc_S, var12);
                     processor.Emit(OpCodes.Brtrue, bl_0024);
                     processor.Emit(OpCodes.Ret);
-
+                    executeMethod.Body.OptimizeMacros();
 
                 }
             }

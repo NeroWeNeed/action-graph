@@ -78,6 +78,7 @@ namespace NeroWeNeed.ActionGraph {
         [ReadOnly]
         public ComponentTypeHandle<PlaceHolderComponetA> p_handle;
 
+
         /*
         Other handles
         */
@@ -86,8 +87,9 @@ namespace NeroWeNeed.ActionGraph {
         [ReadOnly]
         public NativeArray<ConfigInfo> configHandles;
         [ReadOnly]
-        public ActionIndex<Func<ConfigDataHandle, double,bool>> index;
+        public ActionIndex<Func<ConfigDataHandle, double, bool>> index;
 
+        public ComponentTypeHandle<ActionResult<Func<ConfigDataHandle, double, bool>, bool>> results;
 
         public NativeQueue<int> nodeStack;
         [BurstCompile]
@@ -95,13 +97,15 @@ namespace NeroWeNeed.ActionGraph {
 
             var requests = batchInChunk.GetNativeArray(requestHandle);
             var entities = batchInChunk.GetNativeArray(entityHandle);
+            var r = batchInChunk.GetNativeArray(results);
             var d1 = batchInChunk.GetNativeArray(p_handle);
-            
+            bool output = default(bool);
+            bool flag;
             for (int i = 0; i < requests.Length; i++) {
                 var graph = requests[i].value;
                 var handle = configHandles[i].handle;
                 var v1 = d1[i].value;
-                bool output;
+                flag = true;
                 if (graph.IsCreated) {
                     if (requestAtData.HasComponent(entities[i])) {
                         nodeStack.Enqueue(requestAtData[entities[i]].startIndex);
@@ -113,7 +117,14 @@ namespace NeroWeNeed.ActionGraph {
                     }
                     while (!nodeStack.IsEmpty()) {
                         var node = graph.Value.nodes[nodeStack.Dequeue()];
-                        output = index[node.id].Invoke(handle, v1);
+
+                        if (flag) {
+                            output = index[node.id].Invoke(handle, v1);
+                            flag = false;
+                        }
+                        else {
+                            output = index[node.id].Invoke(handle, v1);
+                        }
                         /*
                             Execute Action Code
                         */
@@ -124,6 +135,7 @@ namespace NeroWeNeed.ActionGraph {
                             nodeStack.Enqueue(node.next);
                         }
                     }
+                    r[i] = new ActionResult<Func<ConfigDataHandle, double, bool>, bool> { value = output };
                 }
             }
         }

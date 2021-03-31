@@ -15,7 +15,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
     public class ActionGraphWindow : EditorWindow {
         public const string Uxml = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphEditorWindow.uxml";
         public const string Uss = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphEditorWindow.uss";
-        private const string EditorPrefKey = nameof(ActionGraphWindow);
+        private const string SessionStatePrefKey = nameof(ActionGraphWindow);
         public static ActionGraphWindow ShowWindow(string title) {
             var window = GetWindow<ActionGraphWindow>();
             window.titleContent = new GUIContent(title);
@@ -54,25 +54,23 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             {
                 saveButton.SetEnabled(graphView.IsValid());
             });
-
-
-            if (EditorPrefs.HasKey(EditorPrefKey)) {
+            var old = SessionState.GetString(SessionStatePrefKey, null);
+            if (old != null) {
                 try {
-                    var obj = JsonConvert.DeserializeObject<ContextInfo>(EditorPrefs.GetString(EditorPrefKey));
+                    var obj = JsonConvert.DeserializeObject<ContextInfo>(EditorPrefs.GetString(SessionStatePrefKey));
                     graphView.LoadModules(obj.modules, obj.Container);
                 }
                 catch (Exception) {
                     Debug.LogError("Unable to restore ActionGraph state.");
                 }
-
-
             }
+            
         }
         private void OnDisable() {
             var graphView = rootVisualElement.Q<ActionGraphView>("graphView");
             if (graphView != null) { }
 
-            EditorPrefs.SetString(EditorPrefKey, JsonConvert.SerializeObject(graphView.model.context));
+            
         }
         private void LoadAsset(ScriptableObject asset) {
             var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
@@ -82,6 +80,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 if (asset is ActionAsset actionAsset) {
                     if (settings.TryGetActionInfo(actionAsset.actionId, out var info)) {
                         graphView.LoadModule(new ActionModule(actionAsset, info.Name));
+                        SessionState.SetString(SessionStatePrefKey, JsonConvert.SerializeObject(graphView.model.context));
                     }
                     else {
                         Debug.LogError($"Unknown Action Type with guid '{actionAsset.actionId}' in {actionAsset.name}");
@@ -98,6 +97,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                     }
                     if (actionModules.Count > 0) {
                         graphView.LoadModules(actionModules, asset);
+                        SessionState.SetString(SessionStatePrefKey, JsonConvert.SerializeObject(graphView.model.context));
                     }
                     else {
                         Debug.LogError("No Action Assets found!");

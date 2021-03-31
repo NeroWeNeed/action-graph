@@ -1,12 +1,12 @@
 using System;
-using NeroWeNeed.ActionGraph;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
-[assembly: RegisterGenericJobType(typeof(ActionExecutionJob<Action>))]
 namespace NeroWeNeed.ActionGraph {
 
+[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+public sealed class ActionExecutionSystemGroup : ComponentSystemGroup { }
     public struct ConfigInfo {
         public ConfigDataHandle handle;
         public long length;
@@ -17,7 +17,7 @@ namespace NeroWeNeed.ActionGraph {
         }
     }
     [BurstCompile]
-    public unsafe struct ActionExecutionSystemConfigHandleCreationJob<TActionDelegate> : IJobEntityBatch where TActionDelegate : Delegate {
+    public unsafe struct ActionExecutionConfigInitJob<TActionDelegate> : IJobEntityBatch where TActionDelegate : Delegate {
         [ReadOnly]
         public ComponentTypeHandle<ActionExecutionRequest<TActionDelegate>> requestHandle;
         [WriteOnly]
@@ -41,22 +41,24 @@ namespace NeroWeNeed.ActionGraph {
         }
     }
     [BurstCompile]
-    public unsafe struct ActionExecutionSystemVariableInitializationJob<TActionDelegate, TVariable> : IJobEntityBatch where TActionDelegate : Delegate where TVariable : struct {
+    public unsafe struct ActionExecutionApplyVariableJob<TActionDelegate, TVariable> : IJobEntityBatch where TActionDelegate : Delegate where TVariable : struct {
         [ReadOnly]
         public ComponentTypeHandle<ActionExecutionRequest<TActionDelegate>> requestHandle;
 
 
         [ReadOnly]
-        public NativeArray<TVariable> variables;
+        public ComponentTypeHandle<ActionVariable<TActionDelegate,TVariable>> variableHandle;
+        
         [ReadOnly]
         public NativeArray<ConfigInfo> handles;
         [BurstCompile]
         public void Execute(ArchetypeChunk batchInChunk, int batchIndex) {
 
             var requests = batchInChunk.GetNativeArray(requestHandle);
+            var variables = batchInChunk.GetNativeArray(variableHandle);
             for (int i = 0; i < requests.Length; i++) {
                 var graph = requests[i].value;
-                var variable = variables[i];
+                var variable = variables[i].value;
                 if (graph.IsCreated) {
                     var variablePointer = UnsafeUtility.AddressOf(ref variable);
                     for (int j = 0; j < graph.Value.variables.Length; j++) {
@@ -69,164 +71,7 @@ namespace NeroWeNeed.ActionGraph {
             }
         }
     }
-    [BurstCompile]
-    public unsafe struct ActionExecutionJobv : IJobEntityBatch {
-        [ReadOnly]
-        public ComponentTypeHandle<ActionExecutionRequest<Action<ConfigDataHandle, long>>> requestHandle;
-        [ReadOnly]
-        public EntityTypeHandle entityHandle;
-        [ReadOnly]
-        public ComponentTypeHandle<PlaceHolderComponetA> p_handle;
 
 
-        /*
-        Other handles
-        */
-        [ReadOnly]
-        public ComponentDataFromEntity<ActionExecutionRequestAt<Action<ConfigDataHandle, long>>> requestAtData;
-        [ReadOnly]
-        public NativeArray<ConfigInfo> configHandles;
-        [ReadOnly]
-        public ActionIndex<Func<ConfigDataHandle, double, bool>> index;
-
-        public ComponentTypeHandle<ActionResult<Func<ConfigDataHandle, double, bool>, bool>> results;
-
-        public NativeQueue<int> nodeStack;
-        [BurstCompile]
-        public void Execute(ArchetypeChunk batchInChunk, int batchIndex) {
-
-            var requests = batchInChunk.GetNativeArray(requestHandle);
-            var entities = batchInChunk.GetNativeArray(entityHandle);
-            var r = batchInChunk.GetNativeArray(results);
-            var d1 = batchInChunk.GetNativeArray(p_handle);
-            bool output = default(bool);
-            bool flag;
-            for (int i = 0; i < requests.Length; i++) {
-                var graph = requests[i].value;
-                var handle = configHandles[i].handle;
-                var v1 = d1[i].value;
-                flag = true;
-                if (graph.IsCreated) {
-                    if (requestAtData.HasComponent(entities[i])) {
-                        nodeStack.Enqueue(requestAtData[entities[i]].startIndex);
-                    }
-                    else {
-                        for (int j = 0; j < graph.Value.roots.Length; j++) {
-                            nodeStack.Enqueue(graph.Value.roots[j]);
-                        }
-                    }
-                    while (!nodeStack.IsEmpty()) {
-                        var node = graph.Value.nodes[nodeStack.Dequeue()];
-
-                        if (flag) {
-                            output = index[node.id].Invoke(handle, v1);
-                            flag = false;
-                        }
-                        else {
-                            output = index[node.id].Invoke(handle, v1);
-                        }
-                        /*
-                            Execute Action Code
-                        */
-                        /*
-                            Aggregate return value if present
-                        */
-                        if (node.next >= 0) {
-                            nodeStack.Enqueue(node.next);
-                        }
-                    }
-                    r[i] = new ActionResult<Func<ConfigDataHandle, double, bool>, bool> { value = output };
-                }
-            }
-        }
-    }
-    [BurstCompile]
-    public unsafe struct ActionExecutionJob<TActionDelegate> : IJobEntityBatch where TActionDelegate : Delegate {
-        [ReadOnly]
-        public ComponentTypeHandle<ActionExecutionRequest<TActionDelegate>> requestHandle;
-        [ReadOnly]
-        public EntityTypeHandle entityHandle;
-        [ReadOnly]
-        public ComponentTypeHandle<PlaceHolderComponetA> p_handle;
-
-        /*
-        Other handles
-        */
-        [ReadOnly]
-        public ComponentDataFromEntity<ActionExecutionRequestAt<TActionDelegate>> requestAtData;
-        [ReadOnly]
-        public NativeArray<ConfigInfo> configHandles;
-        [ReadOnly]
-        public ActionIndex<TActionDelegate> index;
-
-
-        public NativeQueue<int> nodeStack;
-        [BurstCompile]
-        public void Execute(ArchetypeChunk batchInChunk, int batchIndex) {
-
-            var requests = batchInChunk.GetNativeArray(requestHandle);
-            var entities = batchInChunk.GetNativeArray(entityHandle);
-            for (int i = 0; i < requests.Length; i++) {
-                var graph = requests[i].value;
-                var handle = configHandles[i];
-                var a2 = configHandles[i];
-                if (graph.IsCreated) {
-                    if (requestAtData.HasComponent(entities[i])) {
-                        nodeStack.Enqueue(requestAtData[entities[i]].startIndex);
-                    }
-                    else {
-                        for (int j = 0; j < graph.Value.roots.Length; j++) {
-                            nodeStack.Enqueue(graph.Value.roots[j]);
-                        }
-                    }
-                    while (!nodeStack.IsEmpty()) {
-                        var node = graph.Value.nodes[nodeStack.Dequeue()];
-                        var action = index[node.id];
-
-                        /*
-                            Execute Action Code
-                        */
-                        /*
-                            Aggregate return value if present
-                        */
-                        if (node.next >= 0) {
-                            nodeStack.Enqueue(node.next);
-                        }
-                    }
-                    nodeStack.Clear();
-                }
-            }
-        }
-    }
-    public interface IActionSystem : ISystemBase {
-        public EntityQuery Query { get; set; }
-    }
-    [BurstCompile]
-    public struct GraphSystem : IActionSystem {
-        private EntityQuery query;
-
-        public EntityQuery Query { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public FunctionPointer<Action<int>> call;
-
-        public void OnCreate(ref SystemState state) {
-            query = state.GetEntityQuery(
-                ComponentType.ReadOnly<PlaceHolderComponetA>(),
-                ComponentType.ReadOnly<PlaceHolderComponetB>()
-            );
-            state.RequireForUpdate(query);
-            state.RequireSingletonForUpdate<PlaceHolderComponetD>();
-
-        }
-
-        public void OnDestroy(ref SystemState state) {
-
-            int xyz = default;
-            call.Invoke(xyz);
-            call.Invoke(30);
-        }
-
-        public void OnUpdate(ref SystemState state) {
-
-        }
-    }
+    
 }

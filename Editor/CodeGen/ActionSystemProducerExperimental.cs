@@ -1,5 +1,6 @@
-using System;
+/* using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using Mono.Cecil;
@@ -9,8 +10,13 @@ using NeroWeNeed.Commons.Editor;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using UnityEditor;
+using UnityEditor.Callbacks;
+using UnityEditor.Compilation;
 using UnityEngine;
+
+
 
 namespace NeroWeNeed.ActionGraph.Editor {
     public static class ActionSystemProducer {
@@ -18,22 +24,68 @@ namespace NeroWeNeed.ActionGraph.Editor {
         public const string ActionExecutionSystemBaseName = "ActionExecutionSystem";
         public const string AssemblyName = "NeroWeNeed.ActionGraph.ActionSystems";
         public const string Output = "Packages/github.neroweneed.action-graph/" + AssemblyName + ".dll";
+
+
         [MenuItem("Assets/Generate Action Assembly")]
+
         public static void CreateAssembly() {
             var definitions = AssetDatabase.FindAssets($"t:{nameof(ActionDefinitionAsset)}").Select(guid => AssetDatabase.LoadAssetAtPath<ActionDefinitionAsset>(AssetDatabase.GUIDToAssetPath(guid))).ToList();
             using var resolver = new DefaultAssemblyResolver();
             resolver.AddSearchDirectory("Library/ScriptAssemblies");
 
-            using (var assembly = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(AssemblyName, new Version(1, 0, 0, 0)), "NeroWeNeed.ActionGraph.ActionSystems", new ModuleParameters { Kind = ModuleKind.Dll, AssemblyResolver = resolver })) {
+            using (var assembly = AssemblyDefinition.CreateAssembly(new AssemblyNameDefinition(AssemblyName, new Version(1, 0, 0, 0)), "NeroWeNeed.ActionGraph.ActionSystems", new ModuleParameters { Kind = ModuleKind.Dll, AssemblyResolver = resolver, Runtime = TargetRuntime.Net_4_0, })) {
+                var genericComponents = new HashSet<Type>();
+                var genericJobs = new HashSet<Type>();
                 foreach (var definition in definitions) {
                     if (definition.delegateType.IsCreated) {
                         var system = ActionExecutionSystemDefinition.Create(assembly.MainModule, definition, definition.delegateType);
+                        foreach (var genericType in system.genericComponents) {
+                            genericComponents.Add(genericType);
+                        }
+                        foreach (var genericType in system.genericJobs) {
+                            genericJobs.Add(genericType);
+                        }
                         assembly.MainModule.Types.Add(system.definition);
+
                     }
                 }
+                var typeReferenceType = assembly.MainModule.ImportReference(typeof(Type));
+                MethodReference ctor1 = assembly.MainModule.ImportReference(typeof(RegisterGenericComponentTypeAttribute).GetConstructor(new Type[] { typeof(Type) }));
+                MethodReference ctor2 = assembly.MainModule.ImportReference(typeof(RegisterGenericJobTypeAttribute).GetConstructor(new Type[] { typeof(Type) }));
+                foreach (var type in genericComponents)
+                {
+                    var attr = new CustomAttribute(ctor1);
+                    attr.ConstructorArguments.Add(new CustomAttributeArgument(typeReferenceType, assembly.MainModule.ImportReference(type)));
+                    assembly.CustomAttributes.Add(attr);
+                    
+                }
+                foreach (var type in genericJobs) {
+                    var attr = new CustomAttribute(ctor1);
+                    attr.ConstructorArguments.Add(new CustomAttributeArgument(typeReferenceType, assembly.MainModule.ImportReference(type)));
+                    assembly.CustomAttributes.Add(attr);
+                }
+                //assembly.MainModule.Types.Add(CreateSampleSystem(assembly.MainModule));
                 assembly.Write(Output);
             }
             AssetDatabase.ImportAsset(Output);
+
+
+        }
+        private static TypeDefinition CreateSampleSystem(ModuleDefinition moduleDefinition) {
+            var type = new TypeDefinition(string.Empty, "SampleExeSystem", Mono.Cecil.TypeAttributes.Sealed | Mono.Cecil.TypeAttributes.Public, moduleDefinition.ImportReference(typeof(SystemBase)));
+            var ctor = new MethodDefinition(".ctor", Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.HideBySig | Mono.Cecil.MethodAttributes.SpecialName | Mono.Cecil.MethodAttributes.RTSpecialName, moduleDefinition.TypeSystem.Void);
+
+            var il = ctor.Body.GetILProcessor();
+            il.Emit(OpCodes.Ret);
+
+            var m1 = new MethodDefinition("OnUpdate", Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.CheckAccessOnOverride, moduleDefinition.TypeSystem.Void);
+            m1.IsVirtual = true;
+            m1.IsReuseSlot = true;
+            m1.IsHideBySig = true;
+            m1.Body.GetILProcessor().Emit(OpCodes.Ret);
+            type.Methods.Add(m1);
+            type.Methods.Add(ctor);
+            return type;
         }
         private static string GetNamespace(string baseNamespace) => string.IsNullOrEmpty(baseNamespace) ? GeneratedNamespaceExtension : $"{baseNamespace}.{GeneratedNamespaceExtension}";
         private abstract class ActionExecutionSystemDefinition {
@@ -42,6 +94,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
             public MethodDefinition onCreateMethod;
             public MethodDefinition onUpdateMethod;
             public MethodDefinition onDestroyMethod;
+            public Type variableType;
+            public TypeReference variableTypeReference;
+            public List<Type> genericComponents = new List<Type>();
+            public List<Type> genericJobs = new List<Type>();
+            public bool HasVariable { get => variableType != null; }
 
 
             public static ActionExecutionSystemDefinition Create<TDelegate>(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) where TDelegate : Delegate {
@@ -54,18 +111,39 @@ namespace NeroWeNeed.ActionGraph.Editor {
         private class ActionExecutionSystemDefinition<TDelegate> : ActionExecutionSystemDefinition where TDelegate : Delegate {
             public ActionExecutionJobDefinition jobDefinition;
             public ActionExecutionSystemDefinition(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
-                definition = new TypeDefinition(GetNamespace(typeof(TDelegate).Namespace), $"{ActionExecutionSystemBaseName}_{typeof(TDelegate).FullName.Replace('.', '_')}", Mono.Cecil.TypeAttributes.Public | Mono.Cecil.TypeAttributes.SequentialLayout, moduleDefinition.ImportReference(typeof(ValueType)));
+                definition = new TypeDefinition(GetNamespace(typeof(TDelegate).Namespace), $"{ActionExecutionSystemBaseName}_{typeof(TDelegate).FullName.Replace('.', '_')}", Mono.Cecil.TypeAttributes.Public | Mono.Cecil.TypeAttributes.SequentialLayout | Mono.Cecil.TypeAttributes.Sealed, moduleDefinition.ImportReference(typeof(ValueType)));
+
+
+
                 definition.Interfaces.Add(new InterfaceImplementation(moduleDefinition.ImportReference(typeof(ISystemBase))));
+
                 entityQueryField = new FieldDefinition("query", Mono.Cecil.FieldAttributes.Private, moduleDefinition.ImportReference(typeof(EntityQuery)));
                 definition.Fields.Add(entityQueryField);
+                variableType = actionDefinitionAsset.variableType.IsCreated ? actionDefinitionAsset.variableType.Value : null;
+
+                if (HasVariable) {
+                    variableTypeReference = moduleDefinition.ImportReference(variableType);
+                }
+                genericComponents.Add(typeof(ActionExecutionRequest<TDelegate>));
+                genericComponents.Add(typeof(ActionExecutionRequestAt<TDelegate>));
+
+
                 GenerateJob(moduleDefinition, actionDefinitionAsset);
+                if (jobDefinition.HasReturnType && jobDefinition.HasReturnTypeAggregator) {
+                    genericComponents.Add(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), jobDefinition.returnType));
+                }
                 GenerateOnCreate(moduleDefinition, actionDefinitionAsset);
                 GenerateOnUpdate(moduleDefinition, actionDefinitionAsset);
                 GenerateOnDestroy(moduleDefinition, actionDefinitionAsset);
 
             }
             private void GenerateOnCreate(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
-                onCreateMethod = new MethodDefinition(nameof(ISystemBase.OnCreate), Mono.Cecil.MethodAttributes.Public, moduleDefinition.ImportReference(typeof(void)));
+                onCreateMethod = new MethodDefinition(nameof(ISystemBase.OnCreate), Mono.Cecil.MethodAttributes.Public, moduleDefinition.TypeSystem.Void)
+                {
+                    IsVirtual = true,
+                    IsReuseSlot = true,
+                    IsHideBySig = true
+                };
                 var systemState = new ParameterDefinition(new ByReferenceType(moduleDefinition.ImportReference(typeof(SystemState))));
                 onCreateMethod.Parameters.Add(systemState);
                 definition.Methods.Add(onCreateMethod);
@@ -94,7 +172,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                 processor.Emit(OpCodes.Stelem_Any, componentTypeReference);
 
                 int offset = 1;
-                if (variableType != null) {
+                if (HasVariable) {
                     processor.Emit(OpCodes.Dup);
                     processor.Emit(OpCodes.Ldc_I4, offset++);
                     processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetGenericMethod(nameof(ComponentType.ReadOnly), BindingFlags.Static | BindingFlags.Public).MakeGenericMethod(typeof(ActionVariable<,>).MakeGenericType(typeof(TDelegate), variableType))));
@@ -136,14 +214,187 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
 
             private void GenerateOnUpdate(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
-                onUpdateMethod = new MethodDefinition(nameof(ISystemBase.OnUpdate), Mono.Cecil.MethodAttributes.Public, moduleDefinition.ImportReference(typeof(void)));
+                onUpdateMethod = new MethodDefinition(nameof(ISystemBase.OnUpdate), Mono.Cecil.MethodAttributes.Public, moduleDefinition.TypeSystem.Void)
+                {
+                    IsVirtual = true,
+                    IsReuseSlot = true,
+                    IsHideBySig = true
+                };
                 onUpdateMethod.Parameters.Add(new ParameterDefinition(new ByReferenceType(moduleDefinition.ImportReference(typeof(SystemState)))));
+
+
+                onUpdateMethod.Body.InitLocals = true;
+                onUpdateMethod.Body.SimplifyMacros();
                 definition.Methods.Add(onUpdateMethod);
+                var processor = onUpdateMethod.Body.GetILProcessor();
+                //Variables
+                var handles = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>)));
+                onUpdateMethod.Body.Variables.Add(handles);
+                var initConfigInfoJobHandle = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
+                onUpdateMethod.Body.Variables.Add(initConfigInfoJobHandle);
+                var executeAction = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
+                onUpdateMethod.Body.Variables.Add(executeAction);
+                var initConfigInfoJob = new VariableDefinition(moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>)));
+                onUpdateMethod.Body.Variables.Add(initConfigInfoJob);
+                var executeActionJob = new VariableDefinition(jobDefinition.definition);
+                onUpdateMethod.Body.Variables.Add(executeActionJob);
+                var executeActionJobHandle = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
+                onUpdateMethod.Body.Variables.Add(executeActionJobHandle);
+                VariableDefinition applyVariableJobHandle = null, applyVariableJob = null;
+                if (HasVariable) {
+                    applyVariableJobHandle = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
+                    onUpdateMethod.Body.Variables.Add(applyVariableJobHandle);
+                    applyVariableJob = new VariableDefinition(moduleDefinition.ImportReference(typeof(ActionExecutionApplyVariableJob<,>).MakeGenericType(typeof(TDelegate), variableType)));
+                    onUpdateMethod.Body.Variables.Add(applyVariableJob);
+                    genericJobs.Add(typeof(ActionExecutionApplyVariableJob<,>).MakeGenericType(typeof(TDelegate), variableType));
+                }
+                genericJobs.Add(typeof(ActionExecutionConfigInitJob<TDelegate>));
+                
+                //Methods
+                var systemState_executionRequestHandle = moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetComponentTypeHandle)).MakeGenericMethod(typeof(ActionExecutionRequest<TDelegate>)));
+                MethodReference systemState_variableRequestHandle = null;
+                var systemState_dependency = moduleDefinition.ImportReference(typeof(SystemState).GetProperty(nameof(SystemState.Dependency)).GetMethod);
+
+                var initConfigJob_schedule = moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3).MakeGenericMethod(typeof(ActionExecutionConfigInitJob<TDelegate>)));
+                var executeActionJob_schedule = new GenericInstanceMethod(moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3)));
+                executeActionJob_schedule.GenericArguments.Add(jobDefinition.definition);
+
+
+                MethodReference applyVariableJob_schedule = null;
+                //Fields
+                var initConfigInfo_requestHandle = moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>).GetField(nameof(ActionExecutionConfigInitJob<TDelegate>.requestHandle)));
+                var initConfigInfo_handles = moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>).GetField(nameof(ActionExecutionConfigInitJob<TDelegate>.handles)));
+                FieldReference applyVariable_requestHandle = null, applyVariable_handles = null, applyVariable_variables = null;
+                if (HasVariable) {
+                    var variableJobType = typeof(ActionExecutionApplyVariableJob<,>).MakeGenericType(typeof(TDelegate), variableType);
+                    var variableComponentType = typeof(ActionVariable<,>).MakeGenericType(typeof(TDelegate), variableType);
+                    applyVariable_requestHandle = moduleDefinition.ImportReference(variableJobType.GetField("requestHandle"));
+                    applyVariable_handles = moduleDefinition.ImportReference(variableJobType.GetField("handles"));
+                    applyVariable_variables = moduleDefinition.ImportReference(variableJobType.GetField("variableHandle"));
+                    systemState_variableRequestHandle = moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetComponentTypeHandle)).MakeGenericMethod(variableComponentType));
+                    applyVariableJob_schedule = moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3).MakeGenericMethod(variableJobType));
+                }
+
+                //Init Config Handle Job
+                VariableDefinition currentDependency = null;
+                processor.Emit(OpCodes.Nop);
+                processor.Emit(OpCodes.Ldloca, handles);
+                processor.Emit(OpCodes.Ldarg_0);
+                processor.Emit(OpCodes.Ldflda, entityQueryField);
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(EntityQuery).GetMethod(nameof(EntityQuery.CalculateEntityCount), Type.EmptyTypes)));
+                processor.Emit(OpCodes.Ldc_I4, (int)Allocator.TempJob);
+                processor.Emit(OpCodes.Ldc_I4_1);
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>).GetConstructor(new Type[] { typeof(int), typeof(Allocator), typeof(NativeArrayOptions) })));
+                processor.Emit(OpCodes.Ldloca, initConfigInfoJob);
+                processor.Emit(OpCodes.Initobj, moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>)));
+                processor.Emit(OpCodes.Ldloca, initConfigInfoJob);
+                processor.Emit(OpCodes.Ldarg_1);
+                processor.Emit(OpCodes.Ldc_I4_1);
+                processor.Emit(OpCodes.Call, systemState_executionRequestHandle);
+                processor.Emit(OpCodes.Stfld, initConfigInfo_requestHandle);
+                processor.Emit(OpCodes.Ldloca, initConfigInfoJob);
+                processor.Emit(OpCodes.Ldloc, handles);
+                processor.Emit(OpCodes.Stfld, initConfigInfo_handles);
+                processor.Emit(OpCodes.Ldloc, initConfigInfoJob);
+                processor.Emit(OpCodes.Ldarg_0);
+                processor.Emit(OpCodes.Ldfld, entityQueryField);
+                processor.Emit(OpCodes.Ldarg_1);
+                processor.Emit(OpCodes.Call, systemState_dependency);
+                processor.Emit(OpCodes.Call, initConfigJob_schedule);
+                processor.Emit(OpCodes.Stloc, initConfigInfoJobHandle);
+                currentDependency = initConfigInfoJobHandle;
+                //Apply Variables Job
+                if (HasVariable) {
+                    processor.Emit(OpCodes.Ldloca, applyVariableJob);
+                    processor.Emit(OpCodes.Initobj, moduleDefinition.ImportReference(typeof(ActionExecutionApplyVariableJob<,>).MakeGenericType(typeof(TDelegate), variableType)));
+                    processor.Emit(OpCodes.Ldloca, applyVariableJob);
+                    processor.Emit(OpCodes.Ldarg_1);
+                    processor.Emit(OpCodes.Ldc_I4_1);
+                    processor.Emit(OpCodes.Call, systemState_executionRequestHandle);
+                    processor.Emit(OpCodes.Stfld, applyVariable_requestHandle);
+                    processor.Emit(OpCodes.Ldloca, applyVariableJob);
+                    processor.Emit(OpCodes.Ldloc, handles);
+                    processor.Emit(OpCodes.Stfld, applyVariable_handles);
+                    processor.Emit(OpCodes.Ldloca, applyVariableJob);
+                    processor.Emit(OpCodes.Ldarg_1);
+                    processor.Emit(OpCodes.Ldc_I4_1);
+                    processor.Emit(OpCodes.Call, systemState_variableRequestHandle);
+                    processor.Emit(OpCodes.Stfld, applyVariable_variables);
+                    processor.Emit(OpCodes.Ldloc, applyVariableJob);
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldfld, entityQueryField);
+                    processor.Emit(OpCodes.Ldloc, currentDependency);
+                    processor.Emit(OpCodes.Call, applyVariableJob_schedule);
+                    processor.Emit(OpCodes.Stloc, applyVariableJobHandle);
+                    currentDependency = applyVariableJobHandle;
+                }
+                //Execute Action Job
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Initobj, jobDefinition.definition);
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Ldarg_1);
+                processor.Emit(OpCodes.Ldc_I4_1);
+                processor.Emit(OpCodes.Call, systemState_executionRequestHandle);
+                processor.Emit(OpCodes.Stfld, jobDefinition.requestHandleField);
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Ldarg_1);
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetEntityTypeHandle))));
+                processor.Emit(OpCodes.Stfld, jobDefinition.entityHandleField);
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Ldloc, handles);
+                processor.Emit(OpCodes.Stfld, jobDefinition.configHandlesField);
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Ldarg_1);
+                processor.Emit(OpCodes.Ldc_I4_1);
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetComponentDataFromEntity)).MakeGenericMethod(typeof(ActionExecutionRequestAt<TDelegate>))));
+                processor.Emit(OpCodes.Stfld, jobDefinition.requestAtDataField);
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Ldc_I4, (int)Allocator.TempJob);
+                processor.Emit(OpCodes.Newobj, moduleDefinition.ImportReference(typeof(NativeQueue<int>).GetConstructor(new Type[] { typeof(Allocator) })));
+                processor.Emit(OpCodes.Stfld, jobDefinition.nodeQueueField);
+                processor.Emit(OpCodes.Ldloca, executeActionJob);
+                processor.Emit(OpCodes.Ldarg_1);
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetSingleton)).MakeGenericMethod(typeof(ActionIndex<TDelegate>))));
+                processor.Emit(OpCodes.Stfld, jobDefinition.actionIndexField);
+                foreach (var actionParameter in jobDefinition.actionParameterFields.Where(p => p.componentType != null && p.fieldDefinition != null)) {
+                    processor.Emit(OpCodes.Ldloca, executeActionJob);
+                    processor.Emit(OpCodes.Ldarg_1);
+                    processor.Emit(OpCodes.Ldc_I4_1);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetComponentTypeHandle)).MakeGenericMethod(actionParameter.componentType)));
+                    processor.Emit(OpCodes.Stfld, actionParameter.fieldDefinition);
+                }
+                if (jobDefinition.returnHandleField != null) {
+                    processor.Emit(OpCodes.Ldloca, executeActionJob);
+                    processor.Emit(OpCodes.Ldarg_1);
+                    processor.Emit(OpCodes.Ldc_I4_0);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemState).GetMethod(nameof(SystemState.GetComponentTypeHandle)).MakeGenericMethod(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), jobDefinition.returnType))));
+                    processor.Emit(OpCodes.Stfld, jobDefinition.returnHandleField);
+                }
+                processor.Emit(OpCodes.Ldloc, executeActionJob);
+                processor.Emit(OpCodes.Ldarg_0);
+                processor.Emit(OpCodes.Ldfld, entityQueryField);
+                processor.Emit(OpCodes.Ldloc, currentDependency);
+                processor.Emit(OpCodes.Call, executeActionJob_schedule);
+                processor.Emit(OpCodes.Stloc, executeActionJobHandle);
+                processor.Emit(OpCodes.Ldloca, handles);
+                processor.Emit(OpCodes.Ldloc, executeActionJobHandle);
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>).GetMethod(nameof(NativeArray<ConfigInfo>.Dispose), new Type[] { typeof(JobHandle) })));
+                processor.Emit(OpCodes.Ret);
+                onUpdateMethod.Body.OptimizeMacros();
+
             }
             private void GenerateOnDestroy(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
-                onDestroyMethod = new MethodDefinition(nameof(ISystemBase.OnDestroy), Mono.Cecil.MethodAttributes.Public, moduleDefinition.ImportReference(typeof(void)));
+                onDestroyMethod = new MethodDefinition(nameof(ISystemBase.OnDestroy), Mono.Cecil.MethodAttributes.Public, moduleDefinition.TypeSystem.Void)
+                {
+                    IsVirtual = true,
+                    IsReuseSlot = true,
+                    IsHideBySig = true
+                };
                 onDestroyMethod.Parameters.Add(new ParameterDefinition(new ByReferenceType(moduleDefinition.ImportReference(typeof(SystemState)))));
                 definition.Methods.Add(onDestroyMethod);
+                var processor = onDestroyMethod.Body.GetILProcessor();
+                processor.Emit(OpCodes.Nop);
+                processor.Emit(OpCodes.Ret);
             }
             private void GenerateJob(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
                 jobDefinition = new ActionExecutionJobDefinition(moduleDefinition, definition, actionDefinitionAsset);
@@ -175,14 +426,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
                 public FieldDefinition nodeQueueField;
                 public MethodDefinition executeMethod;
                 public List<ParameterInfo> actionParameterFields;
-
-
                 public FieldDefinition returnHandleField;
-
                 public ActionExecutionJobDefinition(ModuleDefinition moduleDefinition, TypeDefinition containerTypeDefinition, ActionDefinitionAsset actionDefinitionAsset) {
-                    this.definition = new TypeDefinition(string.Empty, "ActionExecutionJob", Mono.Cecil.TypeAttributes.NestedPublic | Mono.Cecil.TypeAttributes.SequentialLayout, moduleDefinition.ImportReference(typeof(ValueType)));
+                    this.definition = new TypeDefinition(string.Empty, "ActionExecutionJob", Mono.Cecil.TypeAttributes.NestedPublic | Mono.Cecil.TypeAttributes.SequentialLayout | Mono.Cecil.TypeAttributes.Sealed, moduleDefinition.ImportReference(typeof(ValueType)));
                     definition.Interfaces.Add(new InterfaceImplementation(moduleDefinition.ImportReference(typeof(IJobEntityBatch))));
-                    //definition.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(BurstCompileAttribute).GetConstructor(Type.EmptyTypes))));
+                    definition.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(BurstCompileAttribute).GetConstructor(Type.EmptyTypes))));
                     var readOnlyAttributeReference = moduleDefinition.ImportReference(typeof(ReadOnlyAttribute).GetConstructor(Type.EmptyTypes));
                     this.returnType = typeof(TDelegate).GetMethod("Invoke").ReturnType;
                     this.returnTypeAggregator = actionDefinitionAsset.aggregator.IsCreated ? moduleDefinition.ImportReference(actionDefinitionAsset.aggregator.Value) : null;
@@ -202,6 +450,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     actionIndexField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(actionIndexField);
                     nodeQueueField = new FieldDefinition("nodeQueue", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(NativeQueue<int>)));
+                    nodeQueueField.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(DeallocateOnJobCompletionAttribute).GetConstructor(Type.EmptyTypes))));
                     definition.Fields.Add(nodeQueueField);
                     if (HasReturnType && HasReturnTypeAggregator) {
                         returnTypeComponent = typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType);
@@ -320,7 +569,12 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     }
 
                     //Method Definition
-                    executeMethod = new MethodDefinition(nameof(IJobEntityBatch.Execute), Mono.Cecil.MethodAttributes.Public, moduleDefinition.ImportReference(typeof(void)));
+                    executeMethod = new MethodDefinition(nameof(IJobEntityBatch.Execute), Mono.Cecil.MethodAttributes.Public, moduleDefinition.TypeSystem.Void)
+                    {
+                        IsVirtual = true,
+                        IsReuseSlot = true,
+                        IsHideBySig = true
+                    };
                     //executeMethod.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(BurstCompileAttribute).GetConstructor(Type.EmptyTypes))));
                     //Parameters
                     var batchInChunk = new ParameterDefinition(archetypeChunk);
@@ -351,11 +605,13 @@ namespace NeroWeNeed.ActionGraph.Editor {
 
 
 
-                    VariableDefinition returnVar = null;
+                    VariableDefinition returnVar1 = null;
+                    VariableDefinition returnVar2 = null;
                     VariableDefinition returnVarSource = null;
                     VariableDefinition returnVarComponent = null;
                     if (HasReturnType && HasReturnTypeAggregator) {
-                        returnVar = new VariableDefinition(moduleDefinition.ImportReference(returnType));
+                        returnVar1 = new VariableDefinition(moduleDefinition.ImportReference(returnType));
+                        returnVar2 = new VariableDefinition(moduleDefinition.ImportReference(returnType));
                         returnVarComponent = new VariableDefinition(moduleDefinition.ImportReference(returnTypeComponent));
                         returnVarSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType))));
 
@@ -387,7 +643,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     }
 
                     if (HasReturnType && HasReturnTypeAggregator) {
-                        executeMethod.Body.Variables.Add(returnVar);
+                        executeMethod.Body.Variables.Add(returnVar1);
+                        executeMethod.Body.Variables.Add(returnVar2);
                         executeMethod.Body.Variables.Add(returnVarComponent);
                         executeMethod.Body.Variables.Add(returnVarSource);
                     }
@@ -399,7 +656,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     var bl_0085 = processor.Create(OpCodes.Nop);
                     var bl_0131 = processor.Create(OpCodes.Nop);
                     var bl_0132 = processor.Create(OpCodes.Ldarg_0);
-                    var bl_00cf = processor.Create(OpCodes.Br_S, bl_0132);
+                    var bl_00cf = processor.Create(OpCodes.Br, bl_0132);
                     var bl_00b3 = processor.Create(OpCodes.Ldloc_S, var6);
                     var bl_008b = processor.Create(OpCodes.Nop);
                     var bl_00d1 = processor.Create(OpCodes.Nop);
@@ -541,7 +798,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Clt);
                     processor.Emit(OpCodes.Stloc_S, var7);
                     processor.Emit(OpCodes.Ldloc_S, var7);
-                    processor.Emit(OpCodes.Brtrue_S, bl_008b);
+                    processor.Emit(OpCodes.Brtrue, bl_008b);
                     processor.Emit(OpCodes.Nop);
                     processor.Append(bl_00cf);
 
@@ -570,15 +827,28 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     processor.Emit(OpCodes.Ldloca_S, var13);
                     processor.Emit(OpCodes.Call, functionPointer_invoke);
                     foreach (var item in actionParameterFields) {
-                        processor.Emit(OpCodes.Ldloca_S, item.variableCurrent);
+                        processor.Emit(OpCodes.Ldloc_S, item.variableCurrent);
                     }
                     processor.Emit(OpCodes.Callvirt, moduleDefinition.ImportReference(typeof(TDelegate).GetMethod("Invoke")));
+                    processor.Emit(OpCodes.Stloc_S, returnVar2);
                     if (HasReturnType) {
                         if (HasReturnTypeAggregator) {
-
+                            var br1 = processor.Create(OpCodes.Nop);
+                            var br2 = processor.Create(OpCodes.Nop);
+                            processor.Emit(OpCodes.Ldloc_S, var15);
+                            processor.Emit(OpCodes.Brfalse, br1);
+                            processor.Emit(OpCodes.Ldloc_S, returnVar2);
+                            processor.Emit(OpCodes.Stloc, returnVar1);
+                            processor.Emit(OpCodes.Ldc_I4_0);
+                            processor.Emit(OpCodes.Stloc, var15);
+                            processor.Emit(OpCodes.Br, br2);
+                            processor.Append(br1);
+                            processor.Emit(OpCodes.Ldloc_S, returnVar1);
+                            processor.Emit(OpCodes.Ldloc_S, returnVar2);
                             processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(returnTypeAggregator));
-                            processor.Emit(OpCodes.Stloc_S, returnVar);
-                            
+                            processor.Emit(OpCodes.Stloc_S, returnVar1);
+                            processor.Append(br2);
+
                         }
                         else {
                             processor.Emit(OpCodes.Pop);
@@ -620,14 +890,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
                         processor.Emit(OpCodes.Ldloca_S, returnVarComponent);
                         processor.Emit(OpCodes.Initobj, returnTypeComponentReference);
                         processor.Emit(OpCodes.Ldloca_S, returnVarComponent);
-                        processor.Emit(OpCodes.Ldloca_S, returnVar);
+                        processor.Emit(OpCodes.Ldloc_S, returnVar1);
                         processor.Emit(OpCodes.Stfld, return_value);
                         processor.Emit(OpCodes.Ldloc_S, returnVarComponent);
                         processor.Emit(OpCodes.Call, nativeArray_return_item_set);
                     }
-
-
-
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Nop);
                     processor.Append(bl_0153);
@@ -652,3 +919,4 @@ namespace NeroWeNeed.ActionGraph.Editor {
     }
 
 }
+ */

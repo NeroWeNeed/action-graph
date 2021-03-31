@@ -1,0 +1,23 @@
+{
+    "name": "Unity.NeroWeNeed.ActionGraph.CodeGen",
+    "rootNamespace": "",
+    "references": [
+        "GUID:288397b9b7d65744fa3cccee0af563a6",
+        "GUID:0dfd8ac0f29723342a4d8f868715cec6",
+        "GUID:734d92eba21c94caba915361bd5ac177",
+        "GUID:07ecad55a7336bf48ab59684de11b085",
+        "GUID:4e4a10f31e908ca46a41e81cad616cbc",
+        "GUID:2665a8d13d1b3f18800f46e256720795",
+        "GUID:b75d3cd3037d383a8d1e2f9a26d73d8a",
+        "GUID:e0cd26848372d4e5c891c569017e11f1"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

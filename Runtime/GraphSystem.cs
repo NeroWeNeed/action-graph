@@ -19,7 +19,7 @@ namespace NeroWeNeed.ActionGraph {
     [BurstCompile]
     public unsafe struct ActionExecutionConfigInitJob<TActionDelegate> : IJobEntityBatch where TActionDelegate : Delegate {
         [ReadOnly]
-        public ComponentTypeHandle<ActionExecutionRequest<TActionDelegate>> requestHandle;
+        public ComponentTypeHandle<ActionRequest<TActionDelegate>> requestHandle;
         [WriteOnly]
         public NativeArray<ConfigInfo> handles;
         [BurstCompile]
@@ -43,7 +43,7 @@ namespace NeroWeNeed.ActionGraph {
     [BurstCompile]
     public unsafe struct ActionExecutionApplyVariableJob<TActionDelegate, TVariable> : IJobEntityBatch where TActionDelegate : Delegate where TVariable : struct {
         [ReadOnly]
-        public ComponentTypeHandle<ActionExecutionRequest<TActionDelegate>> requestHandle;
+        public ComponentTypeHandle<ActionRequest<TActionDelegate>> requestHandle;
 
 
         [ReadOnly]

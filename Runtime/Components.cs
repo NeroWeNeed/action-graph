@@ -6,10 +6,10 @@ using Unity.Entities;
 
 namespace NeroWeNeed.ActionGraph {
 
-    public struct ActionExecutionRequest<TAction> : IComponentData where TAction : Delegate {
+    public struct ActionRequest<TAction> : IComponentData where TAction : Delegate {
         public BlobAssetReference<BlobGraph<TAction>> value;
     }
-    public struct ActionExecutionRequestAt<TAction> : IComponentData where TAction : Delegate {
+    public struct ActionRequestAt<TAction> : IComponentData where TAction : Delegate {
         public int startIndex;
     }
     //TODO: Unmanaged?

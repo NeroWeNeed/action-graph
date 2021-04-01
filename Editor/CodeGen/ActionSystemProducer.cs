@@ -140,8 +140,8 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 GenerateOnCreate(moduleDefinition, actionDefinitionAsset);
                 GenerateOnUpdate(moduleDefinition, actionDefinitionAsset);
                 GenerateOnDestroy(moduleDefinition, actionDefinitionAsset);
-                generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionExecutionRequest<TDelegate>)));
-                generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionExecutionRequestAt<TDelegate>)));
+                generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionRequest<TDelegate>)));
+                generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionRequestAt<TDelegate>)));
                 generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionIndex<TDelegate>)));
                 generics.Add(GenericAttributeInfo.Job(moduleDefinition, typeof(ActionExecutionConfigInitJob<TDelegate>)));
                 if (HasVariable) {
@@ -186,7 +186,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 processor.Emit(OpCodes.Newarr, componentTypeReference);
                 processor.Emit(OpCodes.Dup);
                 processor.Emit(OpCodes.Ldc_I4_0);
-                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetGenericMethod(nameof(ComponentType.ReadOnly), BindingFlags.Static | BindingFlags.Public).MakeGenericMethod(typeof(ActionExecutionRequest<TDelegate>))));
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(ComponentType).GetGenericMethod(nameof(ComponentType.ReadOnly), BindingFlags.Static | BindingFlags.Public).MakeGenericMethod(typeof(ActionRequest<TDelegate>))));
                 processor.Emit(OpCodes.Stelem_Any, componentTypeReference);
                 int offset = 1;
                 if (HasVariable) {
@@ -273,7 +273,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     onUpdateMethod.Body.Variables.Add(applyVariableJob);
                 }
                 //Methods
-                var systemState_executionRequestHandle = moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(typeof(ActionExecutionRequest<TDelegate>)));
+                var systemState_executionRequestHandle = moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(typeof(ActionRequest<TDelegate>)));
                 MethodReference systemState_variableRequestHandle = null;
                 var systemState_dependency = moduleDefinition.ImportReference(typeof(SystemBase).GetProperty("Dependency", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).GetMethod);
                 var initConfigJob_schedule = moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3).MakeGenericMethod(typeof(ActionExecutionConfigInitJob<TDelegate>)));
@@ -364,7 +364,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 processor.Emit(OpCodes.Ldloca, executeActionJob);
                 processor.Emit(OpCodes.Ldarg_0);
                 processor.Emit(OpCodes.Ldc_I4_1);
-                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentDataFromEntity)).MakeGenericMethod(typeof(ActionExecutionRequestAt<TDelegate>))));
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentDataFromEntity)).MakeGenericMethod(typeof(ActionRequestAt<TDelegate>))));
                 processor.Emit(OpCodes.Stfld, jobDefinition.requestAtDataField);
                 processor.Emit(OpCodes.Ldloca, executeActionJob);
                 processor.Emit(OpCodes.Ldc_I4, (int)Allocator.TempJob);
@@ -474,13 +474,13 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     var readOnlyAttributeReference = moduleDefinition.ImportReference(typeof(ReadOnlyAttribute).GetConstructor(Type.EmptyTypes));
                     this.returnType = typeof(TDelegate).GetMethod("Invoke").ReturnType;
                     this.returnTypeAggregator = actionDefinitionAsset.aggregator.IsCreated ? moduleDefinition.ImportReference(actionDefinitionAsset.aggregator.Value) : null;
-                    requestHandleField = new FieldDefinition("requestHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(typeof(ActionExecutionRequest<TDelegate>))));
+                    requestHandleField = new FieldDefinition("requestHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(typeof(ActionRequest<TDelegate>))));
                     requestHandleField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(requestHandleField);
                     entityHandleField = new FieldDefinition("entityHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(EntityTypeHandle)));
                     entityHandleField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(entityHandleField);
-                    requestAtDataField = new FieldDefinition("requestAtData", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<>).MakeGenericType(typeof(ActionExecutionRequestAt<TDelegate>))));
+                    requestAtDataField = new FieldDefinition("requestAtData", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<>).MakeGenericType(typeof(ActionRequestAt<TDelegate>))));
                     requestAtDataField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(requestAtDataField);
                     configHandlesField = new FieldDefinition("configHandles", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>)));
@@ -561,11 +561,11 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 private void GenerateExecute(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
                     //Type References
                     var nativeArray_entity = moduleDefinition.ImportReference(typeof(NativeArray<Entity>));
-                    var nativeArray_actionExecutionRequest = moduleDefinition.ImportReference(typeof(NativeArray<ActionExecutionRequest<TDelegate>>));
+                    var nativeArray_actionExecutionRequest = moduleDefinition.ImportReference(typeof(NativeArray<ActionRequest<TDelegate>>));
                     var blobAssetReference_blobGraph = moduleDefinition.ImportReference(typeof(BlobAssetReference<BlobGraph<TDelegate>>));
                     var entityTypeHandle = moduleDefinition.ImportReference(typeof(EntityTypeHandle));
-                    var componentTypeHandle_actionExecutionRequest = moduleDefinition.ImportReference(typeof(ComponentTypeHandle<ActionExecutionRequest<TDelegate>>));
-                    var componentDataFromEntity_actionExecutionRequestAt = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionExecutionRequestAt<TDelegate>>));
+                    var componentTypeHandle_actionExecutionRequest = moduleDefinition.ImportReference(typeof(ComponentTypeHandle<ActionRequest<TDelegate>>));
+                    var componentDataFromEntity_actionExecutionRequestAt = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>));
                     var blobGraphNode = moduleDefinition.ImportReference(typeof(BlobGraphNode));
                     var functionPointer = moduleDefinition.ImportReference(typeof(FunctionPointer<TDelegate>));
                     var nativeQueue_int = moduleDefinition.ImportReference(typeof(NativeQueue<int>));
@@ -574,8 +574,8 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     var configInfo = moduleDefinition.ImportReference(typeof(ConfigInfo));
                     var configHandle = moduleDefinition.ImportReference(typeof(ConfigDataHandle));
                     //Method References
-                    var nativeArray_actionExecutionRequest_length = moduleDefinition.ImportReference(typeof(NativeArray<ActionExecutionRequest<TDelegate>>).GetProperty(nameof(NativeArray<ActionExecutionRequest<TDelegate>>.Length)).GetMethod);
-                    var nativeArray_actionExecutionRequest_item = moduleDefinition.ImportReference(typeof(NativeArray<ActionExecutionRequest<TDelegate>>).GetProperty("Item").GetMethod);
+                    var nativeArray_actionExecutionRequest_length = moduleDefinition.ImportReference(typeof(NativeArray<ActionRequest<TDelegate>>).GetProperty(nameof(NativeArray<ActionRequest<TDelegate>>.Length)).GetMethod);
+                    var nativeArray_actionExecutionRequest_item = moduleDefinition.ImportReference(typeof(NativeArray<ActionRequest<TDelegate>>).GetProperty("Item").GetMethod);
                     var nativeArray_configInfo_item = moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>).GetProperty("Item").GetMethod);
                     var blobAssetReference_blobGraph_value = moduleDefinition.ImportReference(typeof(BlobAssetReference<BlobGraph<TDelegate>>).GetProperty(nameof(BlobAssetReference<BlobGraph<TDelegate>>.Value)).GetMethod);
                     var blobAssetReference_blobGraph_isCreated = moduleDefinition.ImportReference(typeof(BlobAssetReference<BlobGraph<TDelegate>>).GetProperty(nameof(BlobAssetReference<BlobGraph<TDelegate>>.IsCreated)).GetMethod);
@@ -583,12 +583,12 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     var nativeQueue_int_dequeue = moduleDefinition.ImportReference(typeof(NativeQueue<int>).GetMethod(nameof(NativeQueue<int>.Dequeue)));
                     var nativeQueue_int_clear = moduleDefinition.ImportReference(typeof(NativeQueue<int>).GetMethod(nameof(NativeQueue<int>.Clear)));
                     var nativeQueue_int_isEmpty = moduleDefinition.ImportReference(typeof(NativeQueue<int>).GetMethod(nameof(NativeQueue<int>.IsEmpty)));
-                    var componentDataFromEntity_actionExecutionRequestAt_hasComponent = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionExecutionRequestAt<TDelegate>>).GetMethod(nameof(ComponentDataFromEntity<ActionExecutionRequestAt<TDelegate>>.HasComponent)));
-                    var componentDataFromEntity_actionExecutionRequestAt_item = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionExecutionRequestAt<TDelegate>>).GetProperty("Item").GetMethod);
+                    var componentDataFromEntity_actionExecutionRequestAt_hasComponent = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>).GetMethod(nameof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>.HasComponent)));
+                    var componentDataFromEntity_actionExecutionRequestAt_item = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>).GetProperty("Item").GetMethod);
                     var nativeArray_entity_item = moduleDefinition.ImportReference(typeof(NativeArray<Entity>).GetProperty("Item").GetMethod);
                     var actionIndex_item = moduleDefinition.ImportReference(typeof(ActionIndex<TDelegate>).GetProperty("Item").GetMethod);
                     var archetypeChunk_getNativeArray_entityTypeHandle = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethod(nameof(ArchetypeChunk.GetNativeArray), new Type[] { typeof(EntityTypeHandle) }));
-                    var archetypeChunk_getNativeArray = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethods(BindingFlags.Public | BindingFlags.Instance).First(m => m.Name == nameof(ArchetypeChunk.GetNativeArray) && m.IsGenericMethod).MakeGenericMethod(typeof(ActionExecutionRequest<TDelegate>)));
+                    var archetypeChunk_getNativeArray = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethods(BindingFlags.Public | BindingFlags.Instance).First(m => m.Name == nameof(ArchetypeChunk.GetNativeArray) && m.IsGenericMethod).MakeGenericMethod(typeof(ActionRequest<TDelegate>)));
                     MethodReference archetypeChunk_getNativeArray_returnTypeHandle = null;
                     MethodReference nativeArray_return_item_set = null;
                     if (HasReturnType && HasReturnTypeAggregator) {
@@ -601,12 +601,12 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     var blobArray_blobGraphNode_item = moduleDefinition.ImportReference(typeof(BlobArray<BlobGraphNode>).GetProperty("Item").GetMethod);
                     var functionPointer_invoke = moduleDefinition.ImportReference(typeof(FunctionPointer<TDelegate>).GetProperty("Invoke").GetMethod);
                     //Fields
-                    var actionExecutionRequestAt_startIndex = moduleDefinition.ImportReference(typeof(ActionExecutionRequestAt<TDelegate>).GetField(nameof(ActionExecutionRequestAt<TDelegate>.startIndex)));
+                    var actionExecutionRequestAt_startIndex = moduleDefinition.ImportReference(typeof(ActionRequestAt<TDelegate>).GetField(nameof(ActionRequestAt<TDelegate>.startIndex)));
                     var blobGraphNode_id = moduleDefinition.ImportReference(typeof(BlobGraphNode).GetField(nameof(BlobGraphNode.id)));
                     var blobGraphNode_next = moduleDefinition.ImportReference(typeof(BlobGraphNode).GetField(nameof(BlobGraphNode.next)));
                     var blobGraph_roots = moduleDefinition.ImportReference(typeof(BlobGraph<TDelegate>).GetField(nameof(BlobGraph<TDelegate>.roots)));
                     var blobGraph_nodes = moduleDefinition.ImportReference(typeof(BlobGraph<TDelegate>).GetField(nameof(BlobGraph<TDelegate>.nodes)));
-                    var actionExecutionRequest_value = moduleDefinition.ImportReference(typeof(ActionExecutionRequest<TDelegate>).GetField(nameof(ActionExecutionRequest<TDelegate>.value)));
+                    var actionExecutionRequest_value = moduleDefinition.ImportReference(typeof(ActionRequest<TDelegate>).GetField(nameof(ActionRequest<TDelegate>.value)));
                     var configHandle_handle = moduleDefinition.ImportReference(typeof(ConfigInfo).GetField(nameof(ConfigInfo.handle)));
                     var configHandle_length = moduleDefinition.ImportReference(typeof(ConfigInfo).GetField(nameof(ConfigInfo.length)));
                     FieldReference return_value = null;

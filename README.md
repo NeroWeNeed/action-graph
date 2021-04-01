@@ -26,3 +26,5 @@ Action-Graph was designed as an aid for programmers instead of a replacement. Gr
 - Undo/Redo functionality
 - Update documentation
 - Unit & Integration Tests
+- Node Groups
+- Node Colours

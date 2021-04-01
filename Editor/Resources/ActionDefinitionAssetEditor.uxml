@@ -7,6 +7,7 @@
         <uie:PropertyField binding-path="variableType" />
         <uie:PropertyField binding-path="validatorType" />
         <uie:PropertyField binding-path="useFieldTransformers" />
+        <uie:PropertyField binding-path="destroyEntitiesUsing" />
         <ui:VisualElement name="aggregator-container"/>
     </ui:VisualElement>
 </ui:UXML>

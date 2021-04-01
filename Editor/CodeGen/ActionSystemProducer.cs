@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using Mono.Cecil;
@@ -12,16 +11,31 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using UnityEditor;
-using UnityEditor.Callbacks;
 using UnityEditor.Compilation;
 using UnityEngine;
 
 namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
+
     public static class ActionSystemProducerClass {
         public const string GeneratedNamespaceExtension = "Generated";
         public const string ActionExecutionSystemBaseName = "ActionExecutionSystem";
         public const string AssemblyName = "NeroWeNeed.ActionGraph.ActionSystems";
         public const string Output = "Packages/github.neroweneed.action-graph/" + AssemblyName + ".dll";
+
+
+        private static void InitCallbacks() {
+
+            EditorApplication.playModeStateChanged += OnEnterPlaymode;
+            CompilationPipeline.compilationFinished += OnScriptsReloaded;
+        }
+        private static void OnScriptsReloaded(object obj) {
+            CreateAssembly();
+        }
+        private static void OnEnterPlaymode(PlayModeStateChange change) {
+            if (change == PlayModeStateChange.ExitingEditMode) {
+
+            }
+        }
         [MenuItem("Assets/Generate Action Assembly")]
         public static void CreateAssembly() {
             var definitions = AssetDatabase.FindAssets($"t:{nameof(ActionDefinitionAsset)}").Select(guid => AssetDatabase.LoadAssetAtPath<ActionDefinitionAsset>(AssetDatabase.GUIDToAssetPath(guid))).ToList();
@@ -57,11 +71,14 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
         private abstract class ActionExecutionSystemDefinition {
             public TypeDefinition definition;
             public FieldDefinition entityQueryField;
+            public FieldDefinition entityCommandBufferSystemField;
             public MethodDefinition onCreateMethod;
             public MethodDefinition onUpdateMethod;
             public MethodDefinition onDestroyMethod;
             public Type variableType;
             public TypeReference variableTypeReference;
+            public Type entityCommandBufferSystemType;
+            public TypeReference entityCommandBufferSystemTypeReference;
             public bool HasVariable { get => variableType != null; }
             public List<GenericAttributeInfo> generics = new List<GenericAttributeInfo>();
             public static ActionExecutionSystemDefinition Create<TDelegate>(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) where TDelegate : Delegate {
@@ -103,6 +120,14 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 definition = new TypeDefinition(GetNamespace(typeof(TDelegate).Namespace), $"{ActionExecutionSystemBaseName}_{typeof(TDelegate).FullName.Replace('.', '_')}", Mono.Cecil.TypeAttributes.Public | Mono.Cecil.TypeAttributes.Sealed, moduleDefinition.ImportReference(typeof(SystemBase)));
                 entityQueryField = new FieldDefinition("query", Mono.Cecil.FieldAttributes.Private, moduleDefinition.ImportReference(typeof(EntityQuery)));
                 definition.Fields.Add(entityQueryField);
+                if (actionDefinitionAsset.destroyEntitiesUsing.IsCreated) {
+                    entityCommandBufferSystemType = actionDefinitionAsset.destroyEntitiesUsing;
+                    entityCommandBufferSystemTypeReference = moduleDefinition.ImportReference(actionDefinitionAsset.destroyEntitiesUsing);
+                    entityCommandBufferSystemField = new FieldDefinition("entityCommandBufferSystem", Mono.Cecil.FieldAttributes.Private, entityCommandBufferSystemTypeReference);
+
+                    definition.Fields.Add(entityCommandBufferSystemField);
+                }
+
                 variableType = actionDefinitionAsset.variableType.IsCreated ? actionDefinitionAsset.variableType.Value : null;
                 if (HasVariable) {
                     variableTypeReference = moduleDefinition.ImportReference(variableType);
@@ -199,6 +224,15 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.RequireSingletonForUpdate)).MakeGenericMethod(component.Value.componentType)));
                     processor.Emit(OpCodes.Nop);
                 }
+
+                //EntityCommandBufferSystem for entity cleanup if provided
+                if (entityCommandBufferSystemField != null) {
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetProperty(nameof(SystemBase.World)).GetMethod));
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(World).GetGenericMethod(nameof(World.GetOrCreateSystem), BindingFlags.Public | BindingFlags.Instance).MakeGenericMethod(entityCommandBufferSystemType)));
+                    processor.Emit(OpCodes.Stfld, entityCommandBufferSystemField);
+                }
                 processor.Emit(OpCodes.Ret);
             }
             private void GenerateOnUpdate(ModuleDefinition moduleDefinition, ActionDefinitionAsset actionDefinitionAsset) {
@@ -226,6 +260,11 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 onUpdateMethod.Body.Variables.Add(executeActionJob);
                 var executeActionJobHandle = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
                 onUpdateMethod.Body.Variables.Add(executeActionJobHandle);
+                VariableDefinition entityCommandBuffer = null;
+                if (entityCommandBufferSystemField != null) {
+                    entityCommandBuffer = new VariableDefinition(moduleDefinition.ImportReference(typeof(EntityCommandBuffer)));
+                    onUpdateMethod.Body.Variables.Add(entityCommandBuffer);
+                }
                 VariableDefinition applyVariableJobHandle = null, applyVariableJob = null;
                 if (HasVariable) {
                     applyVariableJobHandle = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
@@ -338,9 +377,16 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 foreach (var actionParameter in jobDefinition.actionParameterFields.Where(p => p.componentType != null && p.fieldDefinition != null)) {
                     processor.Emit(OpCodes.Ldloca, executeActionJob);
                     processor.Emit(OpCodes.Ldarg_0);
-                    processor.Emit(OpCodes.Ldc_I4_1);
-                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(actionParameter.componentType)));
-                    processor.Emit(OpCodes.Stfld, actionParameter.fieldDefinition);
+                    if (actionParameter.singleton) {
+                        processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetSingleton)).MakeGenericMethod(actionParameter.componentType)));
+                        processor.Emit(OpCodes.Stfld, actionParameter.fieldDefinition);
+                    }
+                    else {
+                        processor.Emit(OpCodes.Ldc_I4_1);
+                        processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(actionParameter.componentType)));
+                        processor.Emit(OpCodes.Stfld, actionParameter.fieldDefinition);
+                    }
+
                 }
                 if (jobDefinition.returnHandleField != null) {
                     processor.Emit(OpCodes.Ldloca, executeActionJob);
@@ -358,6 +404,23 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 processor.Emit(OpCodes.Ldloca, handles);
                 processor.Emit(OpCodes.Ldloc, executeActionJobHandle);
                 processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>).GetMethod(nameof(NativeArray<ConfigInfo>.Dispose), new Type[] { typeof(JobHandle) })));
+
+                //Destroy entities if requested
+                if (entityCommandBufferSystemField != null) {
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldfld, entityCommandBufferSystemField);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(EntityCommandBufferSystem).GetMethod(nameof(EntityCommandBufferSystem.CreateCommandBuffer))));
+                    processor.Emit(OpCodes.Stloc, entityCommandBuffer);
+                    processor.Emit(OpCodes.Ldloc, entityCommandBuffer);
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldfld, entityQueryField);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(EntityCommandBuffer).GetMethod(nameof(EntityCommandBuffer.DestroyEntitiesForEntityQuery))));
+
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldfld, entityCommandBufferSystemField);
+                    processor.Emit(OpCodes.Ldloc, executeActionJobHandle);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(EntityCommandBufferSystem).GetMethod(nameof(EntityCommandBufferSystem.AddJobHandleForProducer))));
+                }
                 processor.Emit(OpCodes.Ret);
                 onUpdateMethod.Body.OptimizeMacros();
             }
@@ -434,6 +497,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                         returnTypeComponentReference = moduleDefinition.ImportReference(returnTypeComponent);
                         returnTypeComponentTypeHandleReference = moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(returnTypeComponent));
                         returnHandleField = new FieldDefinition("returnHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(returnTypeComponentTypeHandleReference));
+                        returnHandleField.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(WriteOnlyAttribute).GetConstructor(Type.EmptyTypes))));
                         definition.Fields.Add(returnHandleField);
                     }
                     var components = actionDefinitionAsset.GetComponents();
@@ -454,16 +518,31 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                             };
                         }
                         else if (components.TryGetValue(parameter.Name, out var component)) {
-                            var info = new ParameterInfo
-                            {
-                                fieldDefinition = new FieldDefinition($"{parameter.Name}_parameterHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(component.componentType))),
-                                parameterType = parameter.ParameterType,
-                                fieldName = component.fieldName,
-                                singleton = component.singletonTarget,
-                                componentType = component.componentType,
-                                variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType)),
-                                variableSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(component.componentType)))
-                            };
+                            ParameterInfo info;
+                            if (component.singletonTarget) {
+                                info = new ParameterInfo
+                                {
+                                    fieldDefinition = new FieldDefinition($"{parameter.Name}_parameterHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(component.componentType)),
+                                    parameterType = parameter.ParameterType,
+                                    fieldName = component.fieldName,
+                                    singleton = component.singletonTarget,
+                                    componentType = component.componentType,
+                                    variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType))
+                                };
+                            }
+                            else {
+                                info = new ParameterInfo
+                                {
+                                    fieldDefinition = new FieldDefinition($"{parameter.Name}_parameterHandle", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ComponentTypeHandle<>).MakeGenericType(component.componentType))),
+                                    parameterType = parameter.ParameterType,
+                                    fieldName = component.fieldName,
+                                    singleton = component.singletonTarget,
+                                    componentType = component.componentType,
+                                    variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType)),
+                                    variableSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(component.componentType)))
+                                };
+                            }
+
                             info.fieldDefinition.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                             definition.Fields.Add(info.fieldDefinition);
                             return info;
@@ -541,7 +620,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                         IsReuseSlot = true,
                         IsHideBySig = true
                     };
-                    //executeMethod.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(BurstCompileAttribute).GetConstructor(Type.EmptyTypes))));
+                    executeMethod.CustomAttributes.Add(new CustomAttribute(moduleDefinition.ImportReference(typeof(BurstCompileAttribute).GetConstructor(Type.EmptyTypes))));
                     //Parameters
                     var batchInChunk = new ParameterDefinition(archetypeChunk);
                     var batchIndex = new ParameterDefinition(moduleDefinition.TypeSystem.Int32);
@@ -625,32 +704,35 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
 
                     processor.Emit(OpCodes.Nop);
                     // NativeArray<ActionExecutionRequest<SampleDelegate>> nativeArray = P_0.GetNativeArray(requestHandle);
-                    processor.Emit(OpCodes.Ldarga_S, batchInChunk);
+                    processor.Emit(OpCodes.Ldarga, batchInChunk);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldfld, requestHandleField);
                     processor.Emit(OpCodes.Call, archetypeChunk_getNativeArray);
                     processor.Emit(OpCodes.Stloc_0);
                     // NativeArray<Entity> nativeArray2 = P_0.GetNativeArray(entityHandle);
-                    processor.Emit(OpCodes.Ldarga_S, batchInChunk);
+                    processor.Emit(OpCodes.Ldarga, batchInChunk);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldfld, entityHandleField);
                     processor.Emit(OpCodes.Call, archetypeChunk_getNativeArray_entityTypeHandle);
                     processor.Emit(OpCodes.Stloc_1);
                     if (HasReturnType && HasReturnTypeAggregator) {
-                        processor.Emit(OpCodes.Ldarga_S, batchInChunk);
+                        processor.Emit(OpCodes.Ldarga, batchInChunk);
                         processor.Emit(OpCodes.Ldarg_0);
                         processor.Emit(OpCodes.Ldfld, returnHandleField);
                         processor.Emit(OpCodes.Call, archetypeChunk_getNativeArray_returnTypeHandle);
-                        processor.Emit(OpCodes.Stloc_S, returnVarSource);
+                        processor.Emit(OpCodes.Stloc, returnVarSource);
                     }
                     //Parameter Native Arrays
                     var parameterNativeArrayGetter = typeof(ArchetypeChunk).GetGenericMethod(nameof(ArchetypeChunk.GetNativeArray), BindingFlags.Public | BindingFlags.Instance);
                     foreach (var parameterInfo in actionParameterFields.Where(p => p.fieldDefinition != null)) {
-                        processor.Emit(OpCodes.Ldarga_S, batchInChunk);
-                        processor.Emit(OpCodes.Ldarg_0);
-                        processor.Emit(OpCodes.Ldfld, parameterInfo.fieldDefinition);
-                        processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(parameterNativeArrayGetter.MakeGenericMethod(parameterInfo.componentType)));
-                        processor.Emit(OpCodes.Stloc_S, parameterInfo.variableSource);
+                        if (parameterInfo.variableSource != null) {
+                            processor.Emit(OpCodes.Ldarga, batchInChunk);
+                            processor.Emit(OpCodes.Ldarg_0);
+                            processor.Emit(OpCodes.Ldfld, parameterInfo.fieldDefinition);
+                            processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(parameterNativeArrayGetter.MakeGenericMethod(parameterInfo.componentType)));
+                            processor.Emit(OpCodes.Stloc, parameterInfo.variableSource);
+                        }
+
                     }
                     // for (int i = 0; i < nativeArray.Length; i++)
                     processor.Emit(OpCodes.Ldc_I4_0);
@@ -671,45 +753,46 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Ldflda, configHandlesField);
                     processor.Emit(OpCodes.Ldloc_2);
                     processor.Emit(OpCodes.Call, nativeArray_configInfo_item);
-                    processor.Emit(OpCodes.Stloc_S, var14);
+                    processor.Emit(OpCodes.Stloc, var14);
                     foreach (var parameterInfo in actionParameterFields) {
                         if (parameterInfo.parameterType == typeof(ConfigDataHandle)) {
                             processor.Emit(OpCodes.Ldloca_S, var14);
                             processor.Emit(OpCodes.Ldfld, configHandle_handle);
-                            processor.Emit(OpCodes.Stloc_S, parameterInfo.variableCurrent);
+                            processor.Emit(OpCodes.Stloc, parameterInfo.variableCurrent);
                         }
                         else if (parameterInfo.parameterType == typeof(ConfigDataLength)) {
                             processor.Emit(OpCodes.Ldloca_S, var14);
                             processor.Emit(OpCodes.Ldfld, configHandle_length);
-                            processor.Emit(OpCodes.Stloc_S, parameterInfo.variableCurrent);
+                            processor.Emit(OpCodes.Stloc, parameterInfo.variableCurrent);
                         }
                         else if (parameterInfo.variableSource != null) {
-                            processor.Emit(OpCodes.Ldloca_S, parameterInfo.variableSource);
+                            processor.Emit(OpCodes.Ldloca, parameterInfo.variableSource);
                             processor.Emit(OpCodes.Ldloc_2);
                             processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(parameterInfo.componentType).GetProperty("Item").GetMethod));
                             processor.Emit(OpCodes.Ldfld, moduleDefinition.ImportReference(parameterInfo.componentType.GetField(parameterInfo.fieldName)));
-                            processor.Emit(OpCodes.Stloc_S, parameterInfo.variableCurrent);
+                            processor.Emit(OpCodes.Stloc, parameterInfo.variableCurrent);
                         }
+
                     }
 
 
                     // if (!value.IsCreated)
-                    processor.Emit(OpCodes.Ldloca_S, var3);
+                    processor.Emit(OpCodes.Ldloca, var3);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_isCreated);
-                    processor.Emit(OpCodes.Stloc_S, var4);
-                    processor.Emit(OpCodes.Ldloc_S, var4);
+                    processor.Emit(OpCodes.Stloc, var4);
+                    processor.Emit(OpCodes.Ldloc, var4);
                     processor.Emit(OpCodes.Brfalse, bl_0153);
 
                     // if (requestAtData.HasComponent(nativeArray2[i]))
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, requestAtDataField);
-                    processor.Emit(OpCodes.Ldloca_S, var1);
+                    processor.Emit(OpCodes.Ldloca, var1);
                     processor.Emit(OpCodes.Ldloc_2);
                     processor.Emit(OpCodes.Call, nativeArray_entity_item);
                     processor.Emit(OpCodes.Call, componentDataFromEntity_actionExecutionRequestAt_hasComponent);
-                    processor.Emit(OpCodes.Stloc_S, var5);
-                    processor.Emit(OpCodes.Ldloc_S, var5);
+                    processor.Emit(OpCodes.Stloc, var5);
+                    processor.Emit(OpCodes.Ldloc, var5);
                     processor.Emit(OpCodes.Brfalse, bl_0085);
                     // nodeQueue.Enqueue(requestAtData[nativeArray2[i]].startIndex);
                     processor.Emit(OpCodes.Nop);
@@ -717,7 +800,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, requestAtDataField);
-                    processor.Emit(OpCodes.Ldloca_S, var1);
+                    processor.Emit(OpCodes.Ldloca, var1);
                     processor.Emit(OpCodes.Ldloc_2);
                     processor.Emit(OpCodes.Call, nativeArray_entity_item);
                     processor.Emit(OpCodes.Call, componentDataFromEntity_actionExecutionRequestAt_item);
@@ -729,35 +812,35 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     // for (int j = 0; j < value.Value.roots.Length; j++)
                     processor.Append(bl_0085);
                     processor.Emit(OpCodes.Ldc_I4_0);
-                    processor.Emit(OpCodes.Stloc_S, var6);
+                    processor.Emit(OpCodes.Stloc, var6);
                     processor.Emit(OpCodes.Br, bl_00b3);
                     // nodeQueue.Enqueue(value.Value.roots[j]);
                     processor.Append(bl_008b);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
-                    processor.Emit(OpCodes.Ldloca_S, var3);
+                    processor.Emit(OpCodes.Ldloca, var3);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_roots);
-                    processor.Emit(OpCodes.Ldloc_S, var6);
+                    processor.Emit(OpCodes.Ldloc, var6);
                     processor.Emit(OpCodes.Call, blobArray_int_item);
                     processor.Emit(OpCodes.Ldind_I4);
                     processor.Emit(OpCodes.Call, nativeQueue_int_enqueue);
                     processor.Emit(OpCodes.Nop);
                     // for (int j = 0; j < value.Value.roots.Length; j++)
                     processor.Emit(OpCodes.Nop);
-                    processor.Emit(OpCodes.Ldloc_S, var6);
+                    processor.Emit(OpCodes.Ldloc, var6);
                     processor.Emit(OpCodes.Ldc_I4_1);
                     processor.Emit(OpCodes.Add); //IL_00B0
-                    processor.Emit(OpCodes.Stloc_S, var6);
+                    processor.Emit(OpCodes.Stloc, var6);
                     // for (int j = 0; j < value.Value.roots.Length; j++)
                     processor.Append(bl_00b3);
-                    processor.Emit(OpCodes.Ldloca_S, var3);
+                    processor.Emit(OpCodes.Ldloca, var3);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_roots);
                     processor.Emit(OpCodes.Call, blobArray_int_length);
                     processor.Emit(OpCodes.Clt);
-                    processor.Emit(OpCodes.Stloc_S, var7);
-                    processor.Emit(OpCodes.Ldloc_S, var7);
+                    processor.Emit(OpCodes.Stloc, var7);
+                    processor.Emit(OpCodes.Ldloc, var7);
                     processor.Emit(OpCodes.Brtrue, bl_008b);
                     processor.Emit(OpCodes.Nop);
                     processor.Append(bl_00cf);
@@ -765,7 +848,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
 
                     processor.Append(bl_00d1);
 
-                    processor.Emit(OpCodes.Ldloca_S, var3);
+                    processor.Emit(OpCodes.Ldloca, var3);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_nodes);
                     processor.Emit(OpCodes.Ldarg_0);
@@ -773,40 +856,45 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Call, nativeQueue_int_dequeue);
                     processor.Emit(OpCodes.Call, blobArray_blobGraphNode_item);
                     processor.Emit(OpCodes.Ldobj, blobGraphNode);
-                    processor.Emit(OpCodes.Stloc_S, var8);
+                    processor.Emit(OpCodes.Stloc, var8);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, actionIndexField);
-                    processor.Emit(OpCodes.Ldloc_S, var8);
+                    processor.Emit(OpCodes.Ldloc, var8);
                     processor.Emit(OpCodes.Ldfld, blobGraphNode_id);
                     processor.Emit(OpCodes.Call, actionIndex_item);
-                    processor.Emit(OpCodes.Stloc_S, var13);
+                    processor.Emit(OpCodes.Stloc, var13);
                     //Call
-                    if (HasReturnType && HasReturnTypeAggregator) {
-                        //processor.Emit(OpCodes.Ldloc_S, returnVar);
-                    }
-                    processor.Emit(OpCodes.Ldloca_S, var13);
+
+                    processor.Emit(OpCodes.Ldloca, var13);
                     processor.Emit(OpCodes.Call, functionPointer_invoke);
                     foreach (var item in actionParameterFields) {
-                        processor.Emit(OpCodes.Ldloc_S, item.variableCurrent);
+                        if (item.singleton) {
+                            processor.Emit(OpCodes.Ldarg_0);
+                            processor.Emit(OpCodes.Ldfld, item.fieldDefinition);
+                            processor.Emit(OpCodes.Ldfld, moduleDefinition.ImportReference(item.componentType.GetField(item.fieldName)));
+                        }
+                        else {
+                            processor.Emit(OpCodes.Ldloc, item.variableCurrent);
+                        }
                     }
                     processor.Emit(OpCodes.Callvirt, moduleDefinition.ImportReference(typeof(TDelegate).GetMethod("Invoke")));
-                    processor.Emit(OpCodes.Stloc_S, returnVar2);
+                    processor.Emit(OpCodes.Stloc, returnVar2);
                     if (HasReturnType) {
                         if (HasReturnTypeAggregator) {
                             var br1 = processor.Create(OpCodes.Nop);
                             var br2 = processor.Create(OpCodes.Nop);
-                            processor.Emit(OpCodes.Ldloc_S, var15);
+                            processor.Emit(OpCodes.Ldloc, var15);
                             processor.Emit(OpCodes.Brfalse, br1);
-                            processor.Emit(OpCodes.Ldloc_S, returnVar2);
+                            processor.Emit(OpCodes.Ldloc, returnVar2);
                             processor.Emit(OpCodes.Stloc, returnVar1);
                             processor.Emit(OpCodes.Ldc_I4_0);
                             processor.Emit(OpCodes.Stloc, var15);
                             processor.Emit(OpCodes.Br, br2);
                             processor.Append(br1);
-                            processor.Emit(OpCodes.Ldloc_S, returnVar1);
-                            processor.Emit(OpCodes.Ldloc_S, returnVar2);
+                            processor.Emit(OpCodes.Ldloc, returnVar1);
+                            processor.Emit(OpCodes.Ldloc, returnVar2);
                             processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(returnTypeAggregator));
-                            processor.Emit(OpCodes.Stloc_S, returnVar1);
+                            processor.Emit(OpCodes.Stloc, returnVar1);
                             processor.Append(br2);
 
                         }
@@ -817,19 +905,19 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Nop);
 
                     //Inject return update
-                    processor.Emit(OpCodes.Ldloc_S, var8);
+                    processor.Emit(OpCodes.Ldloc, var8);
                     processor.Emit(OpCodes.Ldfld, blobGraphNode_next);
                     processor.Emit(OpCodes.Ldc_I4_0);
                     processor.Emit(OpCodes.Clt);
                     processor.Emit(OpCodes.Ldc_I4_0);
                     processor.Emit(OpCodes.Ceq);
-                    processor.Emit(OpCodes.Stloc_S, var10);
-                    processor.Emit(OpCodes.Ldloc_S, var10);
+                    processor.Emit(OpCodes.Stloc, var10);
+                    processor.Emit(OpCodes.Ldloc, var10);
                     processor.Emit(OpCodes.Brfalse, bl_0131);
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
-                    processor.Emit(OpCodes.Ldloc_S, var8);
+                    processor.Emit(OpCodes.Ldloc, var8);
                     processor.Emit(OpCodes.Ldfld, blobGraphNode_next);
                     processor.Emit(OpCodes.Call, nativeQueue_int_enqueue);
                     processor.Emit(OpCodes.Nop);
@@ -840,19 +928,19 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Call, nativeQueue_int_isEmpty);
                     processor.Emit(OpCodes.Ldc_I4_0);
                     processor.Emit(OpCodes.Ceq);
-                    processor.Emit(OpCodes.Stloc_S, var11);
-                    processor.Emit(OpCodes.Ldloc_S, var11);
+                    processor.Emit(OpCodes.Stloc, var11);
+                    processor.Emit(OpCodes.Ldloc, var11);
                     processor.Emit(OpCodes.Brtrue, bl_00d1);
                     //Update result
                     if (HasReturnType && HasReturnTypeAggregator) {
-                        processor.Emit(OpCodes.Ldloca_S, returnVarSource);
+                        processor.Emit(OpCodes.Ldloca, returnVarSource);
                         processor.Emit(OpCodes.Ldloc_2);
-                        processor.Emit(OpCodes.Ldloca_S, returnVarComponent);
+                        processor.Emit(OpCodes.Ldloca, returnVarComponent);
                         processor.Emit(OpCodes.Initobj, returnTypeComponentReference);
-                        processor.Emit(OpCodes.Ldloca_S, returnVarComponent);
-                        processor.Emit(OpCodes.Ldloc_S, returnVar1);
+                        processor.Emit(OpCodes.Ldloca, returnVarComponent);
+                        processor.Emit(OpCodes.Ldloc, returnVar1);
                         processor.Emit(OpCodes.Stfld, return_value);
-                        processor.Emit(OpCodes.Ldloc_S, returnVarComponent);
+                        processor.Emit(OpCodes.Ldloc, returnVarComponent);
                         processor.Emit(OpCodes.Call, nativeArray_return_item_set);
                     }
                     processor.Emit(OpCodes.Nop);
@@ -863,11 +951,11 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Add);
                     processor.Emit(OpCodes.Stloc_2);
                     processor.Append(bl_0158);
-                    processor.Emit(OpCodes.Ldloca_S, var0);
+                    processor.Emit(OpCodes.Ldloca, var0);
                     processor.Emit(OpCodes.Call, nativeArray_actionExecutionRequest_length);
                     processor.Emit(OpCodes.Clt);
-                    processor.Emit(OpCodes.Stloc_S, var12);
-                    processor.Emit(OpCodes.Ldloc_S, var12);
+                    processor.Emit(OpCodes.Stloc, var12);
+                    processor.Emit(OpCodes.Ldloc, var12);
                     processor.Emit(OpCodes.Brtrue, bl_0024);
                     processor.Emit(OpCodes.Ret);
                     executeMethod.Body.OptimizeMacros();

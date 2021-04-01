@@ -5,8 +5,8 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 namespace NeroWeNeed.ActionGraph {
 
-[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-public sealed class ActionExecutionSystemGroup : ComponentSystemGroup { }
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    public sealed class ActionExecutionSystemGroup : ComponentSystemGroup { }
     public struct ConfigInfo {
         public ConfigDataHandle handle;
         public long length;
@@ -47,8 +47,8 @@ public sealed class ActionExecutionSystemGroup : ComponentSystemGroup { }
 
 
         [ReadOnly]
-        public ComponentTypeHandle<ActionVariable<TActionDelegate,TVariable>> variableHandle;
-        
+        public ComponentTypeHandle<ActionVariable<TActionDelegate, TVariable>> variableHandle;
+
         [ReadOnly]
         public NativeArray<ConfigInfo> handles;
         [BurstCompile]
@@ -73,5 +73,5 @@ public sealed class ActionExecutionSystemGroup : ComponentSystemGroup { }
     }
 
 
-    
+
 }

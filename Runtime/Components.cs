@@ -5,21 +5,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace NeroWeNeed.ActionGraph {
-    public struct PlaceHolderComponetA : IComponentData {
-        public double value;
-    }
-    public struct PlaceHolderComponetB : IComponentData {
 
-    }
-    public struct PlaceHolderComponetC : IComponentData {
-
-    }
-    public struct PlaceHolderComponetD : IComponentData {
-
-    }
-    public struct PlaceHolderComponetE : IComponentData {
-
-    }
     public struct ActionExecutionRequest<TAction> : IComponentData where TAction : Delegate {
         public BlobAssetReference<BlobGraph<TAction>> value;
     }
@@ -33,12 +19,19 @@ namespace NeroWeNeed.ActionGraph {
     public struct ActionResult<TAction, TResult> : IComponentData where TResult : struct where TAction : Delegate {
         public TResult value;
     }
-    public struct ActionIndex<TAction> : IComponentData where TAction : Delegate {
-        public BlobArray<FunctionPointer<TAction>> value;
+    public interface IActionIndex : IComponentData { }
+    public struct ActionIndex<TAction> : IActionIndex where TAction : Delegate {
+        public BlobAssetReference<ActionIndexData<TAction>> value;
         public FunctionPointer<TAction> this[int index]
         {
-            get => value[index];
+            get => value.Value.value[index];
         }
-        public bool IsCreated => value.Length > 0;
+        public bool IsCreated => value.Value.value.Length > 0;
+
+    }
+    public struct ActionIndexData<TAction> where TAction : Delegate {
+
+        public BlobArray<FunctionPointer<TAction>> value;
+
     }
 }

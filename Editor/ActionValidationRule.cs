@@ -5,7 +5,7 @@ using NeroWeNeed.ActionGraph.Editor.Graph;
 using NeroWeNeed.Commons;
 using UnityEditor.Experimental.GraphView;
 
-[assembly: SearchableAssembly]
+
 namespace NeroWeNeed.ActionGraph.Editor {
     public abstract class ActionValidationRule {
         public abstract bool IsValid(ActionGraphView graphView, NodeCollection nodes);

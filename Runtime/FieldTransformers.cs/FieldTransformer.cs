@@ -1,7 +1,7 @@
 using NeroWeNeed.Commons;
 using UnityEngine;
 
-[assembly: SearchableAssembly]
+
 namespace NeroWeNeed.ActionGraph {
     [HideInInspector]
     public unsafe delegate void FieldTransformer(void* input, long inputLength, byte inputType, void* output, long expectedOutputLength);

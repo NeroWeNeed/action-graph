@@ -5,6 +5,7 @@ using NeroWeNeed.ActionGraph.Editor.Graph;
 using NeroWeNeed.ActionGraph.Editor.Schema;
 using NeroWeNeed.Commons;
 using NeroWeNeed.Commons.Editor;
+using Unity.Entities;
 using UnityEditor;
 using UnityEngine;
 namespace NeroWeNeed.ActionGraph.Editor {
@@ -28,9 +29,11 @@ namespace NeroWeNeed.ActionGraph.Editor {
         public string Name { get => string.IsNullOrEmpty(displayName) ? delegateType.Value?.Name : displayName; }
         [SuperTypeFilter(typeof(Delegate))]
         [ConcreteTypeFilter]
+        [ExcludeAssemblyFilter("mscorlib")]
         public SerializableType delegateType;
         [UnmanagedFilter]
         [ConcreteTypeFilter]
+        [ExcludeAssemblyFilter("mscorlib")]
         public SerializableType variableType;
         [SuperTypeFilter(typeof(ActionValidationRule))]
         [ConcreteTypeFilter]
@@ -40,6 +43,8 @@ namespace NeroWeNeed.ActionGraph.Editor {
         public bool recreateActionList = true;
         [Provider(typeof(ActionReturnTypeAggregatorProvider))]
         public SerializableMethod aggregator;
+        [SuperTypeFilter(typeof(EntityCommandBufferSystem))]
+        public SerializableType destroyEntitiesUsing = typeof(EndSimulationEntityCommandBufferSystem);
 
         [HideInInspector]
         private List<Action> actions = new List<Action>();

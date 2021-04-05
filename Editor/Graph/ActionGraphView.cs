@@ -16,6 +16,7 @@ using UnityEngine.UIElements;
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
     public class ActionGraphView : GraphView {
         public const string FieldPortClassName = "action-graph-field-port";
+        public const string FieldOperationOutputPortClassName = "action-graph-field-operation-output-port";
         public const string NodePortClassName = "action-graph-node-port";
         public const string CollectablePortClassName = "action-graph-collectable-port";
         public const string NodeInputPortClassName = "action-graph-input-node-port";
@@ -30,6 +31,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public const string FieldClassName = "action-graph-field";
         public const string VariableIconPath = "Packages/github.neroweneed.action-graph/Editor/Resources/VariableIcon.png";
         public const string ActionNodeClassName = "action-graph-node--action";
+        public const string FieldOperationNodeClassName = "action-graph-node--field-operation";
         public const string VariableNodeClassName = "action-graph-node--variable";
         public const string MasterNodeClassName = "action-graph-node--master";
 
@@ -174,13 +176,14 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                     targetNodeGuid = nodeOutput.Next;
                 }
                 else if (containerNodeData is IPropertyContainer propertyContainer && propertyContainer.Properties.TryGetValue(containerNodePort.viewDataKey, out object property) && property is INodeReference nodeReference) {
-                    
+
                     targetNodeGuid = nodeReference.Get();
                 }
                 else {
                     continue;
                 }
-                var action = model[containerNodeGuid].actionId;
+
+
                 if (string.IsNullOrEmpty(targetNodeGuid)) {
                     containerNodePort.DisconnectAll();
                 }
@@ -276,7 +279,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 var variables = new Dictionary<string, ActionGraphModel.VariableInfo>();
                 if (variableType.IsCreated) {
 
-                    variableType.Value.Decompose((type, fieldInfo,parent, path,parentPath, options) =>
+                    variableType.Value.Decompose((type, fieldInfo, parent, path, parentPath, options) =>
                     {
                         variables[path] = new ActionGraphModel.VariableInfo
                         {
@@ -297,9 +300,15 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 };
             }
             foreach (var node in model.nodes) {
-                node.Value.Data.moduleHint = module.guid;
-                this.model.nodes[node.Key] = node.Value.Data;
-                this.AddElement(node.Value.CreateNode(this, settings, node.Value.layout, node.Key));
+                try {
+                    node.Value.Data.moduleHint = module.guid;
+                    this.model.nodes[node.Key] = node.Value.Data;
+                    this.AddElement(node.Value.CreateNode(this, settings, node.Value.layout, node.Key));
+                }
+                catch (Exception) {
+                    this.model.nodes.Remove(node.Key);
+                }
+
             }
         }
         private GraphViewChange FirePortChangeEvents(GraphViewChange change) {
@@ -347,7 +356,12 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         }
         public override List<Port> GetCompatiblePorts(Port startPort, NodeAdapter nodeAdapter) {
             var containerNode = startPort.GetFirstAncestorOfType<Node>();
-            return this.ports.Where(port => (port.GetFirstAncestorOfType<Node>() != containerNode) && port.portType == startPort.portType && port.direction != startPort.direction && !port.ClassListContains(SilentPortClassName)).ToList();
+            return this.ports.Where(port => (port.GetFirstAncestorOfType<Node>() != containerNode) && PortTypeMatches(port.portType, startPort.portType) && port.direction != startPort.direction && !port.ClassListContains(SilentPortClassName)).ToList();
+        }
+        private static bool PortTypeMatches(Type a, Type b) {
+            Type fieldTypeA = a.GetGenericInterface(typeof(IFieldCompatible<>));
+            Type fieldTypeB = b.GetGenericInterface(typeof(IFieldCompatible<>));
+            return a == b || (fieldTypeA != null && fieldTypeB != null && fieldTypeA == fieldTypeB);
         }
         public void SaveModules() {
             var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
@@ -429,7 +443,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public new class UxmlTraits : VisualElement.UxmlTraits { }
         public static Type CreateActionPortType(Type action) => typeof(ActionPort<>).MakeGenericType(action);
         public static Type CreateFieldPortType(Type action, Type field) => typeof(FieldPort<,>).MakeGenericType(action, field);
-        public static Type CreateVariablePortType(Type variable, Type action) => typeof(VariablePort<,>).MakeGenericType(variable, action);
+        public static Type CreateFieldOperationPortType(Type field) => typeof(FieldOperationPort<>).MakeGenericType(field);
 
     }
 }

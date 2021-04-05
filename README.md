@@ -13,6 +13,7 @@ Action-Graph was designed as an aid for programmers instead of a replacement. Gr
     - Automatically finds relevant nodes through Burstable methods tagged with ActionAttribute.
     - Variable support
     - Customizable Field Drawers for configuration fields
+    - Dockable ScriptableObjects to edit multiple actions in the same window.
 - Burst-Compliant Code Generated Systems
     - Request Actions via the ActionRequest Component.
     - Start Action at arbitrary position via the ActionRequestAt Component.

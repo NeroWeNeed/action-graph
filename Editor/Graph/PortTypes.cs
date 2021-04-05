@@ -1,6 +1,7 @@
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
-    internal sealed class ActionPort<TAction> {    }
-    internal sealed class FieldPort<TAction,TType> {    }
-    internal sealed class VariablePort<TVariable, TAction> {   }
+    internal interface IFieldCompatible<TField> { }
+    internal sealed class ActionPort<TAction> { }
+    internal sealed class FieldPort<TAction, TType> : IFieldCompatible<TType> { }
+    internal sealed class FieldOperationPort<TType> : IFieldCompatible<TType> { }
 
 }

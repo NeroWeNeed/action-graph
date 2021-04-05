@@ -6,14 +6,17 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
-    public class VariableNodeData : NodeData, IPropertyConnector, INodeOutput {
+    public class VariableNodeData : NodeData, IPropertyConnector, INodeOutput, IActionElement {
         public string path;
         public string propertyHint;
         public string next;
+        public ActionId actionId;
         [JsonIgnore]
         public string PropertyHint { get => propertyHint; set => propertyHint = value; }
         [JsonIgnore]
         public string Next { get => next; set => next = value; }
+
+        public ActionId ActionId { get => actionId; }
 
         public override GraphElement CreateNode(ActionGraphView graphView, ActionGraphGlobalSettings settings, Rect layout, string guid) {
             var action = graphView.model.actionInfo[actionId.guid];

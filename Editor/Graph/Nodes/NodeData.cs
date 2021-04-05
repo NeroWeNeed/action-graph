@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
     public abstract class NodeData {
-        public ActionId actionId;
+        
         //public string next;
         public string moduleHint;
         public abstract void RemapGuid(Dictionary<string, string> guidMapping);

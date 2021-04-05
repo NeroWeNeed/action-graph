@@ -28,10 +28,10 @@ namespace NeroWeNeed.ActionGraph.Editor.Analyzer {
             var configTypeQualifiedName = configTypeDef == null ? null : configTypeDef.FullName + ", " + configTypeDef.Module.Assembly.FullName;
             var configType = new SerializableType(configTypeQualifiedName);
             var method = new SerializableMethod(typeDefinition.AssemblyQualifiedName(), methodDefinition.Name);
-            var actionMethod = new ActionSchema.Action.ActionMethod
+            var actionMethod = new ActionSchema.Action.Variant
             {
-                configType = configType,
-                method = method
+                config = configType,
+                call = method
             };
             if (!actions.TryGetValue(identifier, out ActionSchema.Action action)) {
                 action = new ActionSchema.Action
@@ -42,10 +42,10 @@ namespace NeroWeNeed.ActionGraph.Editor.Analyzer {
                 };
                 actions[identifier] = action;
             }
-            if (action.methods.ContainsKey(subIdentifier)) {
+            if (action.variants.ContainsKey(subIdentifier)) {
                 Debug.LogError($"Duplicate Sub-Identifiers found for identifier '{identifier}': '{subIdentifier}'");
             }
-            action.methods[subIdentifier] = actionMethod;
+            action.variants[subIdentifier] = actionMethod;
         }
         public bool IsExplorable(AssemblyDefinition assembly, ModuleDefinition moduleDefinition, TypeDefinition type) {
             return type.IsAbstract && type.IsSealed;

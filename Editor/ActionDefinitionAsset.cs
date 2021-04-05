@@ -30,15 +30,18 @@ namespace NeroWeNeed.ActionGraph.Editor {
         [SuperTypeFilter(typeof(Delegate))]
         [ConcreteTypeFilter]
         [ExcludeAssemblyFilter("mscorlib")]
+        [ExcludeAssemblyFilter("System.", MatchType.StartsWith)]
         public SerializableType delegateType;
         [UnmanagedFilter]
         [ConcreteTypeFilter]
+        [AttributeTypeFilter(typeof(ActionVariable))]
         [ExcludeAssemblyFilter("mscorlib")]
+        [ExcludeAssemblyFilter("System.",MatchType.StartsWith)]
         public SerializableType variableType;
         [SuperTypeFilter(typeof(ActionValidationRule))]
         [ConcreteTypeFilter]
         public SerializableType validatorType;
-        public bool useFieldTransformers = true;
+        public bool useFieldOperations = true;
         [HideInInspector]
         public bool recreateActionList = true;
         [Provider(typeof(ActionReturnTypeAggregatorProvider))]
@@ -66,7 +69,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
         public void RecreateActionList() {
             var schema = ProjectUtility.GetProjectAsset<ActionSchema>();
             if (schema.data.TryGetValue(delegateType.Value, out var data)) {
-                actions = data.SelectMany(kv => kv.Value.methods.Select(method => new Action(kv.Key, method.Key, method.Value.configType, method.Value.method))).ToList();
+                actions = data.SelectMany(kv => kv.Value.variants.Select(method => new Action(kv.Key, method.Key, method.Value.config, method.Value.call))).ToList();
                 actions.Sort();
                 EditorUtility.SetDirty(this);
 

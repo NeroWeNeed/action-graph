@@ -5,4 +5,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public string Next { get; set; }
 
     }
+    public interface IActionElement {
+        public ActionId ActionId { get; }
+    }
 }

@@ -18,7 +18,7 @@ namespace NeroWeNeed.ActionGraph {
         public NodeReference(string value) {
             this.value = value;
         }
-        public NodeIndex Convert<TNodeSerializationData>(Dictionary<string, TNodeSerializationData> nodes) where TNodeSerializationData : NodeSerialiationData {
+        public NodeIndex Convert<TNodeSerializationData>(Dictionary<string, TNodeSerializationData> nodes) where TNodeSerializationData : NodeSerializationData {
             return new NodeIndex { value = nodes.TryGetValue(value, out var data) ? data.index : -1 };
         }
 
@@ -40,13 +40,13 @@ namespace NeroWeNeed.ActionGraph {
 
     }
     public interface IFromGraphInstanceType {
-        public object Convert<TNodeSerializationData>(Dictionary<string, TNodeSerializationData> nodes) where TNodeSerializationData : NodeSerialiationData;
+        public object Convert<TNodeSerializationData>(Dictionary<string, TNodeSerializationData> nodes) where TNodeSerializationData : NodeSerializationData;
     }
     public interface IFromGraphInstanceType<TValue> : IFromGraphInstanceType {
 
-        public new TValue Convert<TNodeSerializationData>(Dictionary<string, TNodeSerializationData> nodes) where TNodeSerializationData : NodeSerialiationData;
+        public new TValue Convert<TNodeSerializationData>(Dictionary<string, TNodeSerializationData> nodes) where TNodeSerializationData : NodeSerializationData;
     }
-    public abstract class NodeSerialiationData {
+    public abstract class NodeSerializationData {
         public int configOffset;
         public int configLength;
         public Type config;

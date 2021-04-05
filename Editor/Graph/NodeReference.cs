@@ -9,8 +9,8 @@ using UnityEngine.UIElements;
 namespace NeroWeNeed.ActionGraph {
     [NodeLayoutHandler(typeof(NodeReference))]
     public class NodeReferenceLayoutHandler : NodeLayoutHandler<NodeReference> {
-        public override bool HandleLayout(Type type, FieldInfo fieldInfo, Type actionType, string path, Node node, NodeReference value) {
-            var port = Port.Create<Edge>(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, ActionGraphView.CreateActionPortType(actionType));
+        public override bool HandleLayout(Type type, FieldInfo fieldInfo, Type portType, string path, Node node, NodeReference value) {
+            var port = Port.Create<Edge>(Orientation.Horizontal, Direction.Output, Port.Capacity.Single, portType);
             port.portName = path;
             port.viewDataKey = path;
             port.tooltip = type.FullName;
@@ -18,7 +18,8 @@ namespace NeroWeNeed.ActionGraph {
             port.AddToClassList(ActionGraphView.CollectablePortClassName);
             port.AddToClassList(ActionGraphView.FieldPortClassName);
             port.AddToClassList(ActionGraphView.NodeConnectionPortClassName);
-            port.portColor = actionType.GetColor(Color.white);
+            //TODO: Improve getcolor
+            port.portColor = portType.IsConstructedGenericType ?portType.GetGenericArguments()[0].GetColor(Color.white) : portType.GetColor(Color.white);
             node.outputContainer.Add(port);
             port.RegisterCallback<PortUpdateEvent>(evt =>
             {

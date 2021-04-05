@@ -4,6 +4,7 @@ using Unity.Entities;
 namespace NeroWeNeed.ActionGraph {
     public struct BlobGraph<TDelegate> where TDelegate : Delegate {
         public BlobArray<BlobGraphNode> nodes;
+        public BlobArray<BlobGraphFieldOperationNode> operations;
         public BlobArray<byte> configuration;
         public BlobArray<BlobGraphVariable> variables;
         public BlobArray<int> roots;
@@ -13,6 +14,13 @@ namespace NeroWeNeed.ActionGraph {
         public int configOffset;
         public int configLength;
         public int next;
+    }
+    public struct BlobGraphFieldOperationNode {
+        public int id;
+        public int configOffset;
+        public int configLength;
+        public int destinationOffset;
+        
     }
     public struct BlobGraphVariable {
         public int variableOffset;

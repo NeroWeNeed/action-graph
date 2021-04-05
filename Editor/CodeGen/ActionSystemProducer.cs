@@ -16,7 +16,7 @@ using UnityEngine;
 
 namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
 
-    public static class ActionSystemProducerClass {
+    public static class ActionSystemProducer {
         public const string GeneratedNamespaceExtension = "Generated";
         public const string ActionExecutionSystemBaseName = "ActionExecutionSystem";
         public const string AssemblyName = "NeroWeNeed.ActionGraph.ActionSystems";
@@ -142,7 +142,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 GenerateOnDestroy(moduleDefinition, actionDefinitionAsset);
                 generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionRequest<TDelegate>)));
                 generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionRequestAt<TDelegate>)));
-                generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionIndex<TDelegate>)));
+                generics.Add(GenericAttributeInfo.Component(moduleDefinition, typeof(ActionList<TDelegate>)));
                 generics.Add(GenericAttributeInfo.Job(moduleDefinition, typeof(ActionExecutionConfigInitJob<TDelegate>)));
                 if (HasVariable) {
                     generics.Add(GenericAttributeInfo.Job(moduleDefinition, typeof(ActionExecutionApplyVariableJob<,>).MakeGenericType(typeof(TDelegate), variableType)));
@@ -217,11 +217,16 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.RequireForUpdate))));
                 processor.Emit(OpCodes.Nop);
                 processor.Emit(OpCodes.Ldarg_0);
-                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.RequireSingletonForUpdate)).MakeGenericMethod(typeof(ActionIndex<TDelegate>))));
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.RequireSingletonForUpdate)).MakeGenericMethod(typeof(ActionList<TDelegate>))));
                 processor.Emit(OpCodes.Nop);
                 foreach (var component in components.Where(c => c.Value.singletonTarget)) {
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.RequireSingletonForUpdate)).MakeGenericMethod(component.Value.componentType)));
+                    processor.Emit(OpCodes.Nop);
+                }
+                if (actionDefinitionAsset.useFieldOperations) {
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.RequireSingletonForUpdate)).MakeGenericMethod(typeof(FieldOperationList))));
                     processor.Emit(OpCodes.Nop);
                 }
 
@@ -272,14 +277,23 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     applyVariableJob = new VariableDefinition(moduleDefinition.ImportReference(typeof(ActionExecutionApplyVariableJob<,>).MakeGenericType(typeof(TDelegate), variableType)));
                     onUpdateMethod.Body.Variables.Add(applyVariableJob);
                 }
+                VariableDefinition fieldOperationsJobHandle = null, fieldOperationsJob = null;
+                if (actionDefinitionAsset.useFieldOperations) {
+                    fieldOperationsJobHandle = new VariableDefinition(moduleDefinition.ImportReference(typeof(JobHandle)));
+                    onUpdateMethod.Body.Variables.Add(fieldOperationsJobHandle);
+                    fieldOperationsJob = new VariableDefinition(moduleDefinition.ImportReference(typeof(ActionExecutionDoFieldOperations<TDelegate>)));
+                    onUpdateMethod.Body.Variables.Add(fieldOperationsJob);
+                }
                 //Methods
                 var systemState_executionRequestHandle = moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(typeof(ActionRequest<TDelegate>)));
-                MethodReference systemState_variableRequestHandle = null;
                 var systemState_dependency = moduleDefinition.ImportReference(typeof(SystemBase).GetProperty("Dependency", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).GetMethod);
                 var initConfigJob_schedule = moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3).MakeGenericMethod(typeof(ActionExecutionConfigInitJob<TDelegate>)));
                 var executeActionJob_schedule = new GenericInstanceMethod(moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3)));
                 executeActionJob_schedule.GenericArguments.Add(jobDefinition.definition);
+                MethodReference systemState_variableRequestHandle = null;
                 MethodReference applyVariableJob_schedule = null;
+                MethodReference fieldOperationsRequestHandle = null;
+                MethodReference fieldOperationsJob_schedule = null;
                 //Fields
                 var initConfigInfo_requestHandle = moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>).GetField(nameof(ActionExecutionConfigInitJob<TDelegate>.requestHandle)));
                 var initConfigInfo_handles = moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>).GetField(nameof(ActionExecutionConfigInitJob<TDelegate>.handles)));
@@ -293,8 +307,17 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     systemState_variableRequestHandle = moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(variableComponentType));
                     applyVariableJob_schedule = moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3).MakeGenericMethod(variableJobType));
                 }
-                //Init Config Handle Job
+                FieldReference fieldOperations_requestHandle = null, fieldOperations_configHandles = null, fieldOperations_operations = null;
+                if (actionDefinitionAsset.useFieldOperations) {
+                    fieldOperationsRequestHandle = moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetComponentTypeHandle)).MakeGenericMethod(typeof(FieldOperationList))); ;
+                    fieldOperationsJob_schedule = moduleDefinition.ImportReference(typeof(JobEntityBatchExtensions).GetMethods(BindingFlags.Static | BindingFlags.Public).First(m => m.Name == nameof(JobEntityBatchExtensions.Schedule) && m.GetParameters().Length == 3).MakeGenericMethod(typeof(ActionExecutionDoFieldOperations<TDelegate>)));
+                    fieldOperations_requestHandle = moduleDefinition.ImportReference(typeof(ActionExecutionDoFieldOperations<TDelegate>).GetField(nameof(ActionExecutionDoFieldOperations<TDelegate>.requestHandle)));
+                    fieldOperations_configHandles = moduleDefinition.ImportReference(typeof(ActionExecutionDoFieldOperations<TDelegate>).GetField(nameof(ActionExecutionDoFieldOperations<TDelegate>.handles)));
+                    fieldOperations_operations = moduleDefinition.ImportReference(typeof(ActionExecutionDoFieldOperations<TDelegate>).GetField(nameof(ActionExecutionDoFieldOperations<TDelegate>.operations)));
+                }
+
                 VariableDefinition currentDependency = null;
+
                 processor.Emit(OpCodes.Nop);
                 processor.Emit(OpCodes.Ldloca, handles);
                 processor.Emit(OpCodes.Ldarg_0);
@@ -303,6 +326,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 processor.Emit(OpCodes.Ldc_I4, (int)Allocator.TempJob);
                 processor.Emit(OpCodes.Ldc_I4_1);
                 processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>).GetConstructor(new Type[] { typeof(int), typeof(Allocator), typeof(NativeArrayOptions) })));
+                //Init Config Handles Job
                 processor.Emit(OpCodes.Ldloca, initConfigInfoJob);
                 processor.Emit(OpCodes.Initobj, moduleDefinition.ImportReference(typeof(ActionExecutionConfigInitJob<TDelegate>)));
                 processor.Emit(OpCodes.Ldloca, initConfigInfoJob);
@@ -346,6 +370,31 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Stloc, applyVariableJobHandle);
                     currentDependency = applyVariableJobHandle;
                 }
+                if (actionDefinitionAsset.useFieldOperations) {
+
+                    processor.Emit(OpCodes.Ldloca, fieldOperationsJob);
+                    processor.Emit(OpCodes.Initobj, moduleDefinition.ImportReference(typeof(ActionExecutionDoFieldOperations<TDelegate>)));
+                    processor.Emit(OpCodes.Ldloca, fieldOperationsJob);
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldc_I4_1);
+                    processor.Emit(OpCodes.Call, systemState_executionRequestHandle);
+                    processor.Emit(OpCodes.Stfld, fieldOperations_requestHandle);
+                    processor.Emit(OpCodes.Ldloca, fieldOperationsJob);
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetSingleton)).MakeGenericMethod(typeof(FieldOperationList))));
+                    processor.Emit(OpCodes.Stfld, fieldOperations_operations);
+
+                    processor.Emit(OpCodes.Ldloca, fieldOperationsJob);
+                    processor.Emit(OpCodes.Ldloc, handles);
+                    processor.Emit(OpCodes.Stfld, fieldOperations_configHandles);
+                    processor.Emit(OpCodes.Ldloc, fieldOperationsJob);
+                    processor.Emit(OpCodes.Ldarg_0);
+                    processor.Emit(OpCodes.Ldfld, entityQueryField);
+                    processor.Emit(OpCodes.Ldloc, currentDependency);
+                    processor.Emit(OpCodes.Call, fieldOperationsJob_schedule);
+                    processor.Emit(OpCodes.Stloc, fieldOperationsJobHandle);
+                    currentDependency = fieldOperationsJobHandle;
+                }
                 //Execute Action Job
                 processor.Emit(OpCodes.Ldloca, executeActionJob);
                 processor.Emit(OpCodes.Initobj, jobDefinition.definition);
@@ -372,12 +421,12 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                 processor.Emit(OpCodes.Stfld, jobDefinition.nodeQueueField);
                 processor.Emit(OpCodes.Ldloca, executeActionJob);
                 processor.Emit(OpCodes.Ldarg_0);
-                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetSingleton)).MakeGenericMethod(typeof(ActionIndex<TDelegate>))));
+                processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetSingleton)).MakeGenericMethod(typeof(ActionList<TDelegate>))));
                 processor.Emit(OpCodes.Stfld, jobDefinition.actionIndexField);
                 foreach (var actionParameter in jobDefinition.actionParameterFields.Where(p => p.componentType != null && p.fieldDefinition != null)) {
                     processor.Emit(OpCodes.Ldloca, executeActionJob);
                     processor.Emit(OpCodes.Ldarg_0);
-                    if (actionParameter.singleton) {
+                    if (actionParameter.variableType == ActionExecutionJobDefinition.ParameterInfo.VariableType.Singleton) {
                         processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(typeof(SystemBase).GetMethod(nameof(SystemBase.GetSingleton)).MakeGenericMethod(actionParameter.componentType)));
                         processor.Emit(OpCodes.Stfld, actionParameter.fieldDefinition);
                     }
@@ -449,6 +498,17 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     public VariableDefinition variableSource;
                     public Type parameterType;
                     public VariableDefinition variableCurrent;
+                    public enum VariableType : byte {
+                        Normal = 0,
+                        Singleton = 1,
+                        ConfigHandle = 2,
+                        ConfigHandleLength = 3,
+                        ConfigOriginHandle = 4,
+                        ConfigOriginHandleLength = 5,
+                        Unassigned = 6
+
+                    }
+                    public VariableType variableType;
                 }
                 public Type returnType;
                 public Type returnTypeComponent;
@@ -486,7 +546,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     configHandlesField = new FieldDefinition("configHandles", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(NativeArray<ConfigInfo>)));
                     configHandlesField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(configHandlesField);
-                    actionIndexField = new FieldDefinition("index", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ActionIndex<TDelegate>)));
+                    actionIndexField = new FieldDefinition("index", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(ActionList<TDelegate>)));
                     actionIndexField.CustomAttributes.Add(new CustomAttribute(readOnlyAttributeReference));
                     definition.Fields.Add(actionIndexField);
                     nodeQueueField = new FieldDefinition("nodeQueue", Mono.Cecil.FieldAttributes.Public, moduleDefinition.ImportReference(typeof(NativeQueue<int>)));
@@ -506,15 +566,17 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                         if (parameter.ParameterType == typeof(ConfigDataLength)) {
                             return new ParameterInfo
                             {
-                                variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(typeof(ConfigDataLength))),
-                                parameterType = typeof(ConfigDataLength)
+                                //variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(typeof(ConfigDataLength))),
+                                parameterType = typeof(ConfigDataLength),
+                                variableType = ParameterInfo.VariableType.ConfigHandleLength
                             };
                         }
                         else if (parameter.ParameterType == typeof(ConfigDataHandle)) {
                             return new ParameterInfo
                             {
                                 variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(typeof(ConfigDataHandle))),
-                                parameterType = typeof(ConfigDataHandle)
+                                parameterType = typeof(ConfigDataHandle),
+                                variableType = ParameterInfo.VariableType.ConfigHandle
                             };
                         }
                         else if (components.TryGetValue(parameter.Name, out var component)) {
@@ -527,7 +589,8 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                                     fieldName = component.fieldName,
                                     singleton = component.singletonTarget,
                                     componentType = component.componentType,
-                                    variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType))
+                                    variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType)),
+                                    variableType = ParameterInfo.VariableType.Singleton
                                 };
                             }
                             else {
@@ -539,7 +602,8 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                                     singleton = component.singletonTarget,
                                     componentType = component.componentType,
                                     variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType)),
-                                    variableSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(component.componentType)))
+                                    variableSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(component.componentType))),
+                                    variableType = ParameterInfo.VariableType.Normal
                                 };
                             }
 
@@ -552,7 +616,8 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                             {
                                 parameterType = parameter.ParameterType,
                                 singleton = component.singletonTarget,
-                                variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType))
+                                variableCurrent = new VariableDefinition(moduleDefinition.ImportReference(parameter.ParameterType)),
+                                variableType = ParameterInfo.VariableType.Unassigned
                             };
                         }
                     }).ToList();
@@ -586,9 +651,10 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     var componentDataFromEntity_actionExecutionRequestAt_hasComponent = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>).GetMethod(nameof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>.HasComponent)));
                     var componentDataFromEntity_actionExecutionRequestAt_item = moduleDefinition.ImportReference(typeof(ComponentDataFromEntity<ActionRequestAt<TDelegate>>).GetProperty("Item").GetMethod);
                     var nativeArray_entity_item = moduleDefinition.ImportReference(typeof(NativeArray<Entity>).GetProperty("Item").GetMethod);
-                    var actionIndex_item = moduleDefinition.ImportReference(typeof(ActionIndex<TDelegate>).GetProperty("Item").GetMethod);
+                    var actionIndex_item = moduleDefinition.ImportReference(typeof(ActionList<TDelegate>).GetProperty("Item").GetMethod);
                     var archetypeChunk_getNativeArray_entityTypeHandle = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethod(nameof(ArchetypeChunk.GetNativeArray), new Type[] { typeof(EntityTypeHandle) }));
                     var archetypeChunk_getNativeArray = moduleDefinition.ImportReference(typeof(ArchetypeChunk).GetMethods(BindingFlags.Public | BindingFlags.Instance).First(m => m.Name == nameof(ArchetypeChunk.GetNativeArray) && m.IsGenericMethod).MakeGenericMethod(typeof(ActionRequest<TDelegate>)));
+                    var configHandle_offset = moduleDefinition.ImportReference(typeof(ConfigHandleExtensions).GetMethod(nameof(ConfigHandleExtensions.CreateFromOffset), BindingFlags.Static | BindingFlags.Public));
                     MethodReference archetypeChunk_getNativeArray_returnTypeHandle = null;
                     MethodReference nativeArray_return_item_set = null;
                     if (HasReturnType && HasReturnTypeAggregator) {
@@ -603,6 +669,8 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     //Fields
                     var actionExecutionRequestAt_startIndex = moduleDefinition.ImportReference(typeof(ActionRequestAt<TDelegate>).GetField(nameof(ActionRequestAt<TDelegate>.startIndex)));
                     var blobGraphNode_id = moduleDefinition.ImportReference(typeof(BlobGraphNode).GetField(nameof(BlobGraphNode.id)));
+                    var blobGraphNode_configOffset = moduleDefinition.ImportReference(typeof(BlobGraphNode).GetField(nameof(BlobGraphNode.configOffset)));
+                    var blobGraphNode_configLength = moduleDefinition.ImportReference(typeof(BlobGraphNode).GetField(nameof(BlobGraphNode.configOffset)));
                     var blobGraphNode_next = moduleDefinition.ImportReference(typeof(BlobGraphNode).GetField(nameof(BlobGraphNode.next)));
                     var blobGraph_roots = moduleDefinition.ImportReference(typeof(BlobGraph<TDelegate>).GetField(nameof(BlobGraph<TDelegate>.roots)));
                     var blobGraph_nodes = moduleDefinition.ImportReference(typeof(BlobGraph<TDelegate>).GetField(nameof(BlobGraph<TDelegate>.nodes)));
@@ -624,6 +692,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     //Parameters
                     var batchInChunk = new ParameterDefinition(archetypeChunk);
                     var batchIndex = new ParameterDefinition(moduleDefinition.TypeSystem.Int32);
+
                     executeMethod.Parameters.Add(batchInChunk);
                     executeMethod.Parameters.Add(batchIndex);
                     definition.Methods.Add(executeMethod);
@@ -631,20 +700,20 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     executeMethod.Body.SimplifyMacros();
                     var processor = executeMethod.Body.GetILProcessor();
                     //Variables
-                    var var0 = new VariableDefinition(nativeArray_actionExecutionRequest);
-                    var var1 = new VariableDefinition(nativeArray_entity);
+                    var actionRequestArrayVariable = new VariableDefinition(nativeArray_actionExecutionRequest);
+                    var entityArrayVariable = new VariableDefinition(nativeArray_entity);
                     var var2 = new VariableDefinition(moduleDefinition.TypeSystem.Int32);
-                    var var3 = new VariableDefinition(blobAssetReference_blobGraph);
+                    var graphVariable = new VariableDefinition(blobAssetReference_blobGraph);
                     var var4 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
                     var var5 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
                     var var6 = new VariableDefinition(moduleDefinition.TypeSystem.Int32);
                     var var7 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
-                    var var8 = new VariableDefinition(blobGraphNode);
+                    var currentNodeVariable = new VariableDefinition(blobGraphNode);
                     var var9 = new VariableDefinition(functionPointer);
                     var var10 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
                     var var11 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
                     var var12 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
-                    var var13 = new VariableDefinition(moduleDefinition.ImportReference(typeof(FunctionPointer<TDelegate>)));
+                    var indexFunctionVariable = new VariableDefinition(moduleDefinition.ImportReference(typeof(FunctionPointer<TDelegate>)));
                     var var14 = new VariableDefinition(moduleDefinition.ImportReference(typeof(ConfigInfo)));
                     var var15 = new VariableDefinition(moduleDefinition.TypeSystem.Boolean);
                     VariableDefinition returnVar1 = null;
@@ -657,20 +726,20 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                         returnVarComponent = new VariableDefinition(moduleDefinition.ImportReference(returnTypeComponent));
                         returnVarSource = new VariableDefinition(moduleDefinition.ImportReference(typeof(NativeArray<>).MakeGenericType(typeof(ActionResult<,>).MakeGenericType(typeof(TDelegate), returnType))));
                     }
-                    executeMethod.Body.Variables.Add(var0);
-                    executeMethod.Body.Variables.Add(var1);
+                    executeMethod.Body.Variables.Add(actionRequestArrayVariable);
+                    executeMethod.Body.Variables.Add(entityArrayVariable);
                     executeMethod.Body.Variables.Add(var2);
-                    executeMethod.Body.Variables.Add(var3);
+                    executeMethod.Body.Variables.Add(graphVariable);
                     executeMethod.Body.Variables.Add(var4);
                     executeMethod.Body.Variables.Add(var5);
                     executeMethod.Body.Variables.Add(var6);
                     executeMethod.Body.Variables.Add(var7);
-                    executeMethod.Body.Variables.Add(var8);
+                    executeMethod.Body.Variables.Add(currentNodeVariable);
                     executeMethod.Body.Variables.Add(var9);
                     executeMethod.Body.Variables.Add(var10);
                     executeMethod.Body.Variables.Add(var11);
                     executeMethod.Body.Variables.Add(var12);
-                    executeMethod.Body.Variables.Add(var13);
+                    executeMethod.Body.Variables.Add(indexFunctionVariable);
                     executeMethod.Body.Variables.Add(var14);
                     executeMethod.Body.Variables.Add(var15);
 
@@ -724,15 +793,13 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     }
                     //Parameter Native Arrays
                     var parameterNativeArrayGetter = typeof(ArchetypeChunk).GetGenericMethod(nameof(ArchetypeChunk.GetNativeArray), BindingFlags.Public | BindingFlags.Instance);
-                    foreach (var parameterInfo in actionParameterFields.Where(p => p.fieldDefinition != null)) {
-                        if (parameterInfo.variableSource != null) {
-                            processor.Emit(OpCodes.Ldarga, batchInChunk);
-                            processor.Emit(OpCodes.Ldarg_0);
-                            processor.Emit(OpCodes.Ldfld, parameterInfo.fieldDefinition);
-                            processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(parameterNativeArrayGetter.MakeGenericMethod(parameterInfo.componentType)));
-                            processor.Emit(OpCodes.Stloc, parameterInfo.variableSource);
-                        }
+                    foreach (var parameterInfo in actionParameterFields.Where(p => p.fieldDefinition != null && p.variableSource != null)) {
 
+                        processor.Emit(OpCodes.Ldarga, batchInChunk);
+                        processor.Emit(OpCodes.Ldarg_0);
+                        processor.Emit(OpCodes.Ldfld, parameterInfo.fieldDefinition);
+                        processor.Emit(OpCodes.Call, moduleDefinition.ImportReference(parameterNativeArrayGetter.MakeGenericMethod(parameterInfo.componentType)));
+                        processor.Emit(OpCodes.Stloc, parameterInfo.variableSource);
                     }
                     // for (int i = 0; i < nativeArray.Length; i++)
                     processor.Emit(OpCodes.Ldc_I4_0);
@@ -740,7 +807,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Br, bl_0158);
                     // BlobAssetReference<BlobGraph<SampleDelegate>> value = nativeArray[i].value;
                     processor.Append(bl_0024);
-                    processor.Emit(OpCodes.Ldloca_S, var0);
+                    processor.Emit(OpCodes.Ldloca_S, actionRequestArrayVariable);
                     processor.Emit(OpCodes.Ldloc_2);
                     processor.Emit(OpCodes.Call, nativeArray_actionExecutionRequest_item);
                     processor.Emit(OpCodes.Ldfld, actionExecutionRequest_value);
@@ -777,7 +844,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
 
 
                     // if (!value.IsCreated)
-                    processor.Emit(OpCodes.Ldloca, var3);
+                    processor.Emit(OpCodes.Ldloca, graphVariable);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_isCreated);
                     processor.Emit(OpCodes.Stloc, var4);
                     processor.Emit(OpCodes.Ldloc, var4);
@@ -787,7 +854,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, requestAtDataField);
-                    processor.Emit(OpCodes.Ldloca, var1);
+                    processor.Emit(OpCodes.Ldloca, entityArrayVariable);
                     processor.Emit(OpCodes.Ldloc_2);
                     processor.Emit(OpCodes.Call, nativeArray_entity_item);
                     processor.Emit(OpCodes.Call, componentDataFromEntity_actionExecutionRequestAt_hasComponent);
@@ -800,7 +867,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, requestAtDataField);
-                    processor.Emit(OpCodes.Ldloca, var1);
+                    processor.Emit(OpCodes.Ldloca, entityArrayVariable);
                     processor.Emit(OpCodes.Ldloc_2);
                     processor.Emit(OpCodes.Call, nativeArray_entity_item);
                     processor.Emit(OpCodes.Call, componentDataFromEntity_actionExecutionRequestAt_item);
@@ -818,7 +885,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Append(bl_008b);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
-                    processor.Emit(OpCodes.Ldloca, var3);
+                    processor.Emit(OpCodes.Ldloca, graphVariable);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_roots);
                     processor.Emit(OpCodes.Ldloc, var6);
@@ -834,7 +901,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Stloc, var6);
                     // for (int j = 0; j < value.Value.roots.Length; j++)
                     processor.Append(bl_00b3);
-                    processor.Emit(OpCodes.Ldloca, var3);
+                    processor.Emit(OpCodes.Ldloca, graphVariable);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_roots);
                     processor.Emit(OpCodes.Call, blobArray_int_length);
@@ -848,7 +915,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
 
                     processor.Append(bl_00d1);
 
-                    processor.Emit(OpCodes.Ldloca, var3);
+                    processor.Emit(OpCodes.Ldloca, graphVariable);
                     processor.Emit(OpCodes.Call, blobAssetReference_blobGraph_value);
                     processor.Emit(OpCodes.Ldflda, blobGraph_nodes);
                     processor.Emit(OpCodes.Ldarg_0);
@@ -856,26 +923,49 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Call, nativeQueue_int_dequeue);
                     processor.Emit(OpCodes.Call, blobArray_blobGraphNode_item);
                     processor.Emit(OpCodes.Ldobj, blobGraphNode);
-                    processor.Emit(OpCodes.Stloc, var8);
+                    processor.Emit(OpCodes.Stloc, currentNodeVariable);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, actionIndexField);
-                    processor.Emit(OpCodes.Ldloc, var8);
+                    processor.Emit(OpCodes.Ldloc, currentNodeVariable);
                     processor.Emit(OpCodes.Ldfld, blobGraphNode_id);
                     processor.Emit(OpCodes.Call, actionIndex_item);
-                    processor.Emit(OpCodes.Stloc, var13);
+                    processor.Emit(OpCodes.Stloc, indexFunctionVariable);
                     //Call
 
-                    processor.Emit(OpCodes.Ldloca, var13);
+                    processor.Emit(OpCodes.Ldloca, indexFunctionVariable);
                     processor.Emit(OpCodes.Call, functionPointer_invoke);
-                    foreach (var item in actionParameterFields) {
-                        if (item.singleton) {
-                            processor.Emit(OpCodes.Ldarg_0);
-                            processor.Emit(OpCodes.Ldfld, item.fieldDefinition);
-                            processor.Emit(OpCodes.Ldfld, moduleDefinition.ImportReference(item.componentType.GetField(item.fieldName)));
+                    foreach (var parameterInfo in actionParameterFields) {
+
+                        switch (parameterInfo.variableType) {
+
+                            case ParameterInfo.VariableType.Singleton:
+                                processor.Emit(OpCodes.Ldarg_0);
+                                processor.Emit(OpCodes.Ldfld, parameterInfo.fieldDefinition);
+                                processor.Emit(OpCodes.Ldfld, moduleDefinition.ImportReference(parameterInfo.componentType.GetField(parameterInfo.fieldName)));
+                                break;
+                            case ParameterInfo.VariableType.ConfigHandle:
+                                processor.Emit(OpCodes.Ldloc, parameterInfo.variableCurrent);
+                                processor.Emit(OpCodes.Ldloc, currentNodeVariable);
+                                processor.Emit(OpCodes.Ldfld, blobGraphNode_configOffset);
+                                processor.Emit(OpCodes.Call, configHandle_offset);
+                                break;
+                            case ParameterInfo.VariableType.ConfigHandleLength:
+                                processor.Emit(OpCodes.Ldloc, currentNodeVariable);
+                                processor.Emit(OpCodes.Ldfld, blobGraphNode_configLength);
+                                break;
+                            case ParameterInfo.VariableType.ConfigOriginHandle:
+                                break;
+                            case ParameterInfo.VariableType.ConfigOriginHandleLength:
+                                break;
+                            case ParameterInfo.VariableType.Unassigned:
+                            case ParameterInfo.VariableType.Normal:
+                                processor.Emit(OpCodes.Ldloc, parameterInfo.variableCurrent);
+                                break;
+                            default:
+                                break;
                         }
-                        else {
-                            processor.Emit(OpCodes.Ldloc, item.variableCurrent);
-                        }
+
+
                     }
                     processor.Emit(OpCodes.Callvirt, moduleDefinition.ImportReference(typeof(TDelegate).GetMethod("Invoke")));
                     processor.Emit(OpCodes.Stloc, returnVar2);
@@ -905,7 +995,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Nop);
 
                     //Inject return update
-                    processor.Emit(OpCodes.Ldloc, var8);
+                    processor.Emit(OpCodes.Ldloc, currentNodeVariable);
                     processor.Emit(OpCodes.Ldfld, blobGraphNode_next);
                     processor.Emit(OpCodes.Ldc_I4_0);
                     processor.Emit(OpCodes.Clt);
@@ -917,7 +1007,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Nop);
                     processor.Emit(OpCodes.Ldarg_0);
                     processor.Emit(OpCodes.Ldflda, nodeQueueField);
-                    processor.Emit(OpCodes.Ldloc, var8);
+                    processor.Emit(OpCodes.Ldloc, currentNodeVariable);
                     processor.Emit(OpCodes.Ldfld, blobGraphNode_next);
                     processor.Emit(OpCodes.Call, nativeQueue_int_enqueue);
                     processor.Emit(OpCodes.Nop);
@@ -951,7 +1041,7 @@ namespace NeroWeNeed.ActionGraph.Editor.CodeGen {
                     processor.Emit(OpCodes.Add);
                     processor.Emit(OpCodes.Stloc_2);
                     processor.Append(bl_0158);
-                    processor.Emit(OpCodes.Ldloca, var0);
+                    processor.Emit(OpCodes.Ldloca, actionRequestArrayVariable);
                     processor.Emit(OpCodes.Call, nativeArray_actionExecutionRequest_length);
                     processor.Emit(OpCodes.Clt);
                     processor.Emit(OpCodes.Stloc, var12);

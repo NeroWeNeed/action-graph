@@ -34,6 +34,8 @@ namespace NeroWeNeed.ActionGraph {
             this.type = type;
         }
     }
+    [AttributeUsage(AttributeTargets.Struct)]
+    public sealed class ActionVariable : Attribute { }
 
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ActionAttribute : Attribute {
@@ -49,7 +51,21 @@ namespace NeroWeNeed.ActionGraph {
             this.configType = configType;
             this.displayName = displayName;
             this.subIdentifier = string.IsNullOrWhiteSpace(subIdentifier) ? string.Empty : subIdentifier;
-
+        }
+    }
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class FieldOperationAttribute : Attribute {
+        public string identifier;
+        public string subIdentifier;
+        public Type configType;
+        public string displayName;
+        public Type output;
+        public FieldOperationAttribute(string identifier, Type configType, string displayName, string subIdentifier,Type output) {
+            this.identifier = identifier;
+            this.configType = configType;
+            this.displayName = displayName;
+            this.subIdentifier = string.IsNullOrWhiteSpace(subIdentifier) ? string.Empty : subIdentifier;
+            this.output = output;
         }
     }
     [AttributeUsage(AttributeTargets.All)]
@@ -59,23 +75,7 @@ namespace NeroWeNeed.ActionGraph {
             this.value = value;
         }
     }
-    [AttributeUsage(AttributeTargets.Method)]
-    public sealed class InputAttribute : Attribute {
-        public Type type;
 
-        public InputAttribute(Type type) {
-            this.type = type;
-        }
-    }
-    [AttributeUsage(AttributeTargets.Method)]
-    public sealed class OutputAttribute : Attribute {
-        public Type type;
-
-        public OutputAttribute(Type type) {
-            this.type = type;
-        }
-    }
-    
     public enum NodeLayout {
         Input, Output, Extension
     }

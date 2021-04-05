@@ -9,20 +9,22 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor.Graph {
-    public class ActionNodeData : NodeData, IPropertyContainer, INodeOutput {
+    public class ActionNodeData : NodeData, IPropertyContainer, INodeOutput, IActionElement {
         public string identifier;
         public string subIdentifier;
         public string next;
+        public ActionId actionId;
         [JsonProperty]
         private Dictionary<string, object> properties = new Dictionary<string, object>();
         [JsonIgnore]
         public Dictionary<string, object> Properties { get => properties; }
         [JsonIgnore]
         public string Next { get => next; set => next = value; }
+        public ActionId ActionId { get => actionId; }
 
         public override ActionAssetModel.Node ToModelNode(Rect layout) => new ActionAssetModel.Node<ActionNodeData>(this, layout);
         public override GraphElement CreateNode(ActionGraphView graphView, ActionGraphGlobalSettings settings, Rect layout, string guid = null) {
-            var info = settings[actionId];
+            var info = settings[ActionId];
             var actionSchema = ProjectUtility.GetOrCreateProjectAsset<ActionSchema>();
             //var nodeInfo = settings.GetAction(actionId, identifier);
             var nodeInfo = actionSchema.data[info.delegateType][identifier];
@@ -71,7 +73,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             });
             node.outputContainer.Add(outputPort);
 
-            if (nodeInfo.MethodCount > 1) {
+            if (nodeInfo.VariantCount > 1) {
                 node.RegisterCallback<ContextualMenuPopulateEvent>(evt =>
                 {
                     var self = (Node)evt.target;
@@ -80,13 +82,13 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                     if (settings == null || graphView == null)
                         return;
                     var data = graphView.model.GetData<ActionNodeData>(self.viewDataKey);
-                    var action = settings.GetAction(data.actionId, data.identifier);
+                    var action = settings.GetAction(data.ActionId, data.identifier);
 
-                    foreach (var method in action.methods) {
+                    foreach (var method in action.variants) {
                         evt.menu.AppendAction($"Type/{method.Key}", (a) =>
                         {
                             data.subIdentifier = (string)a.userData;
-                            data.BuildNodeContents(graphView, self, settings, settings[data.actionId], action, true);
+                            data.BuildNodeContents(graphView, self, settings, settings[data.ActionId], action, true);
                             graphView.RefreshNodeConnections();
                         }, (a) => data.subIdentifier == (string)a.userData ? DropdownMenuAction.Status.Checked : DropdownMenuAction.Status.Normal, method.Key);
                     }
@@ -135,9 +137,9 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 }
             }
             var schema = ProjectUtility.GetOrCreateProjectAsset<TypeFieldSchema>();
-            var method = string.IsNullOrEmpty(subIdentifier) ? action.GetDefaultMethod() : action.methods[subIdentifier];
-            if (method.configType.IsCreated) {
-                method.configType.Value.Decompose((Type type, FieldInfo fieldInfo, FieldInfo parentFieldInfo, string path, string parentPath, TypeDecompositionOptions _) =>
+            var method = string.IsNullOrEmpty(subIdentifier) ? action.GetDefaultVariant() : action.variants[subIdentifier];
+            if (method.config.IsCreated) {
+                method.config.Value.Decompose((Type type, FieldInfo fieldInfo, FieldInfo parentFieldInfo, string path, string parentPath, TypeDecompositionOptions _) =>
                 {
                     object initialValue;
                     type = type.GetCustomAttribute<GraphInstanceTypeAttribute>()?.type ?? type;
@@ -160,11 +162,11 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                     }
                     bool terminal;
                     if (ProjectUtility.GetOrCreateProjectAsset<NodeLayoutHandlerSchema>().data.TryGetValue(type, out var handler)) {
-                        terminal = handler.Value.HandleLayout(type, fieldInfo, info.delegateType, path, node, initialValue);
+                        terminal = handler.Value.HandleLayout(type, fieldInfo, ActionGraphView.CreateActionPortType(info.delegateType), path, node, initialValue);
                     }
                     else {
                         terminal = schema.CreateField(type, fieldInfo, initialValue, out BindableElement element);
-                        ActionNodeUtility.CreateNodeField(node, info.delegateType, type, fieldInfo, element, path);
+                        ActionNodeUtility.CreateNodeField(node, ActionGraphView.CreateFieldPortType(info.delegateType, type), type, fieldInfo, element, path);
                         if (terminal) {
                             element.bindingPath = path;
                         }

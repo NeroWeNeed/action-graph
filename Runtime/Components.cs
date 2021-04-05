@@ -19,17 +19,25 @@ namespace NeroWeNeed.ActionGraph {
     public struct ActionResult<TAction, TResult> : IComponentData where TResult : struct where TAction : Delegate {
         public TResult value;
     }
-    public interface IActionIndex : IComponentData { }
-    public struct ActionIndex<TAction> : IActionIndex where TAction : Delegate {
-        public BlobAssetReference<ActionIndexData<TAction>> value;
+    public interface IFunctionList : IComponentData { }
+    public interface IActionList : IFunctionList { }
+    public struct ActionList<TAction> : IActionList where TAction : Delegate {
+        public BlobAssetReference<FunctionList<TAction>> value;
         public FunctionPointer<TAction> this[int index]
         {
             get => value.Value.value[index];
         }
-        public bool IsCreated => value.Value.value.Length > 0;
-
+        public bool IsCreated => value.IsCreated;
     }
-    public struct ActionIndexData<TAction> where TAction : Delegate {
+    public struct FieldOperationList : IFunctionList  {
+        public BlobAssetReference<FunctionList<FieldOperation>> value;
+        public FunctionPointer<FieldOperation> this[int index]
+        {
+            get => value.Value.value[index];
+        }
+        public bool IsCreated => value.IsCreated;
+    }
+    public struct FunctionList<TAction> where TAction : Delegate {
 
         public BlobArray<FunctionPointer<TAction>> value;
 

@@ -7,5 +7,6 @@ using UnityEngine;
 namespace NeroWeNeed.ActionGraph {
     public class ActionAsset : ScriptableObject {
         public ActionId actionId;
+        public string outputName;
     }
 }

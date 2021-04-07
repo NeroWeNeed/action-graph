@@ -42,6 +42,9 @@ namespace NeroWeNeed.ActionGraph.Editor.Analyzer {
                 };
                 actions[identifier] = action;
             }
+            Debug.Log(method.Value);
+
+
             if (action.variants.ContainsKey(subIdentifier)) {
                 Debug.LogError($"Duplicate Sub-Identifiers found for identifier '{identifier}': '{subIdentifier}'");
             }
@@ -50,8 +53,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Analyzer {
         public bool IsExplorable(AssemblyDefinition assembly, ModuleDefinition moduleDefinition, TypeDefinition type) {
             return type.IsAbstract && type.IsSealed;
         }
-
-        public bool IsValid(MethodDefinition definition) => definition.HasAttribute<ActionAttribute>();
+        //Hack for omitting burst methods from Results.
+        public bool IsValid(MethodDefinition definition) => definition.HasAttribute<ActionAttribute>() && !definition.Name.EndsWith("$BurstManaged");
 
         public void OnBeginAnalysis(AssemblyDefinition assemblyDefinition) {
             assembly = assemblyDefinition.FullName;
@@ -71,6 +74,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Analyzer {
                 else {
                     schema.assemblyData[assembly] = actions;
                 }
+                schema.UpdateIndices();
                 ProjectUtility.UpdateProjectAsset(schema);
             }
         }

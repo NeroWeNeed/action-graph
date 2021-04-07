@@ -23,11 +23,12 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
         }
         private ActionGraphGlobalSettings settings;
-        [MenuItem("Assets/Create/Actions/Action Asset")]
-        public static void CreateAsset() {
+        public static void CreateAsset(ActionId id) {
             var endName = EndNameEditAction.CreateInstance<ActionAssetEndNameEditAction>();
+            endName.id = id;
             ProjectWindowUtil.StartNameEditingIfProjectWindowExists(0, endName, $"{AssetDatabase.GetAssetPath(Selection.activeObject)}/ActionAsset", ActionAssetEditor.AssetIcon, null);
         }
+        public static void CreateAsset(string guid) => CreateAsset(new ActionId(guid));
         private void OnEnable() {
             settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
         }
@@ -55,9 +56,9 @@ namespace NeroWeNeed.ActionGraph.Editor {
                 id.RegisterValueChangedCallback(evt =>
                 {
 
-                    var previousInfo = evt.previousValue.IsCreated ? settings[evt.previousValue] : null;
+                    var previousInfo = evt.previousValue.IsCreated ? ActionDefinitionAsset.Load(evt.previousValue) : null;
                     var self = (ActionIdField)evt.target;
-                    var newInfo = evt.newValue.IsCreated ? settings[evt.newValue] : null;
+                    var newInfo = evt.newValue.IsCreated ? ActionDefinitionAsset.Load(evt.previousValue) : null;
                     var asset = (ActionAsset)serializedObject.targetObject;
                     var model = asset.CreateModel();
                     bool retainNodes = false;
@@ -98,9 +99,10 @@ namespace NeroWeNeed.ActionGraph.Editor {
         }
     }
     internal class ActionAssetEndNameEditAction : EndNameEditAction {
+        public ActionId id;
         public override void Action(int instanceId, string pathName, string resourceFile) {
             var settings = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>();
-            settings.CreateActionAsset(pathName);
+            settings.CreateActionAsset(id,pathName);
         }
     }
 }

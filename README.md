@@ -23,7 +23,6 @@ Action-Graph was designed as an aid for programmers instead of a replacement. Gr
     - All components are separated via the delegate type (i.e. ActionExecute\<Action1\>, ActionExecute\<Action2\>, etc...)
 
 ## TODO
-- Field Transformations
 - Undo/Redo functionality
 - Update documentation
 - Unit & Integration Tests

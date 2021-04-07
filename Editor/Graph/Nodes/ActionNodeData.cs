@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using NeroWeNeed.ActionGraph.Editor.Schema;
 using NeroWeNeed.Commons.Editor;
@@ -24,7 +25,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
         public override ActionAssetModel.Node ToModelNode(Rect layout) => new ActionAssetModel.Node<ActionNodeData>(this, layout);
         public override GraphElement CreateNode(ActionGraphView graphView, ActionGraphGlobalSettings settings, Rect layout, string guid = null) {
-            var info = settings[ActionId];
+            var info = ActionDefinitionAsset.Load(ActionId);
             var actionSchema = ProjectUtility.GetOrCreateProjectAsset<ActionSchema>();
             //var nodeInfo = settings.GetAction(actionId, identifier);
             var nodeInfo = actionSchema.data[info.delegateType][identifier];
@@ -77,18 +78,19 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 node.RegisterCallback<ContextualMenuPopulateEvent>(evt =>
                 {
                     var self = (Node)evt.target;
-                    var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
+                    var schema = ProjectUtility.GetProjectAsset<ActionSchema>();
                     var graphView = self.GetFirstAncestorOfType<ActionGraphView>();
-                    if (settings == null || graphView == null)
+                    if (graphView == null || schema == null)
                         return;
                     var data = graphView.model.GetData<ActionNodeData>(self.viewDataKey);
-                    var action = settings.GetAction(data.ActionId, data.identifier);
+                    var module = graphView.model.context.modules.FirstOrDefault(m => m.action == data.ActionId);
+                    var action = schema[module.definitionAsset, data.identifier];
 
                     foreach (var method in action.variants) {
                         evt.menu.AppendAction($"Type/{method.Key}", (a) =>
                         {
                             data.subIdentifier = (string)a.userData;
-                            data.BuildNodeContents(graphView, self, settings, settings[data.ActionId], action, true);
+                            data.BuildNodeContents(graphView, self, module.definitionAsset, action, true);
                             graphView.RefreshNodeConnections();
                         }, (a) => data.subIdentifier == (string)a.userData ? DropdownMenuAction.Status.Checked : DropdownMenuAction.Status.Normal, method.Key);
                     }
@@ -97,7 +99,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
                 //node.titleContainer.Add(methodSelector);
             }
-            BuildNodeContents(graphView, node, settings, info, nodeInfo);
+            BuildNodeContents(graphView, node, info, nodeInfo);
             node.RegisterCallback<FieldUpdateEvent>(evt =>
             {
                 var element = (Node)evt.currentTarget;
@@ -117,7 +119,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
             return node;
         }
-        private void BuildNodeContents(ActionGraphView graphView, Node node, ActionGraphGlobalSettings settings, ActionDefinitionAsset info, ActionSchema.Action action, bool clean = false) {
+        private void BuildNodeContents(ActionGraphView graphView, Node node, ActionDefinitionAsset info, ActionSchema.Action action, bool clean = false) {
             if (clean) {
                 foreach (var item in node.Query<VisualElement>(null, ActionGraphView.FieldClassName).ToList()) {
                     if (item is Port port) {
@@ -137,7 +139,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 }
             }
             var schema = ProjectUtility.GetOrCreateProjectAsset<TypeFieldSchema>();
-            var method = string.IsNullOrEmpty(subIdentifier) ? action.GetDefaultVariant() : action.variants[subIdentifier];
+            var method = string.IsNullOrEmpty(subIdentifier) ? action.DefaultVariant : action.variants[subIdentifier];
+
             if (method.config.IsCreated) {
                 method.config.Value.Decompose((Type type, FieldInfo fieldInfo, FieldInfo parentFieldInfo, string path, string parentPath, TypeDecompositionOptions _) =>
                 {

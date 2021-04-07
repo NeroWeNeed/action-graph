@@ -13,9 +13,9 @@ namespace NeroWeNeed.ActionGraph.Editor {
     public class ActionAssetPropertyDrawer : PropertyDrawer {
         public override VisualElement CreatePropertyGUI(SerializedProperty property) {
             var field = new ActionAssetField();
-            var attr = fieldInfo.GetCustomAttribute<ActionAssetAttribute>();
+            var attr = fieldInfo.GetCustomAttribute<ActionTypeAttribute>();
             var settings = ProjectUtility.GetProjectAsset<ActionGraphGlobalSettings>();
-            if (attr != null && settings.TryGetActionInfo(attr.name, out ActionDefinitionAsset info)) {
+            if (attr != null && ActionDefinitionAsset.Load(attr.type, out var info)) {
                 field.ActionId = info.id;
             }
             field.Label = property.displayName;

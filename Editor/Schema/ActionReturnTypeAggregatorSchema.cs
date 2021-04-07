@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NeroWeNeed.ActionGraph.Editor.Analyzer;
 using NeroWeNeed.Commons;
 using NeroWeNeed.Commons.AssemblyAnalyzers.Editor;
 using NeroWeNeed.Commons.Editor;
 using Newtonsoft.Json;
+using UnityEditor;
 
 namespace NeroWeNeed.ActionGraph.Editor.Schema {
     [Serializable]
@@ -25,12 +27,12 @@ namespace NeroWeNeed.ActionGraph.Editor.Schema {
     }
     public class ActionReturnTypeAggregatorProvider : IMethodProvider {
 
-        public virtual List<SerializableMethod> GetMethods() {
+        public virtual List<SerializableMethod> GetMethods(FieldInfo fieldInfo,SerializedProperty property) {
             return ProjectUtility.GetOrCreateProjectAsset<ActionReturnTypeAggregatorSchema>().data.SelectMany(v => v.Value).ToList();
         }
     }
     public class ActionReturnTypeAggregatorProvider<TType> : ActionReturnTypeAggregatorProvider {
-        public override List<SerializableMethod> GetMethods() {
+        public override List<SerializableMethod> GetMethods(FieldInfo fieldInfo, SerializedProperty property) {
             if (ProjectUtility.GetOrCreateProjectAsset<ActionReturnTypeAggregatorSchema>().data.TryGetValue(typeof(TType), out var result)) {
                 return result;
             }

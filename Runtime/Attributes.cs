@@ -20,10 +20,10 @@ namespace NeroWeNeed.ActionGraph {
     }
     [AttributeUsage(AttributeTargets.Field)]
     public sealed class ActionTypeAttribute : Attribute {
-        public string name;
+        public Type type;
 
-        public ActionTypeAttribute(string name) {
-            this.name = name;
+        public ActionTypeAttribute(Type type) {
+            this.type = type;
         }
     }
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
@@ -79,13 +79,6 @@ namespace NeroWeNeed.ActionGraph {
     public enum NodeLayout {
         Input, Output, Extension
     }
-    [AttributeUsage(AttributeTargets.Field)]
-    public sealed class ActionAssetAttribute : Attribute {
-        public string name;
 
-        public ActionAssetAttribute(string name) {
-            this.name = name;
-        }
-    }
 
 }

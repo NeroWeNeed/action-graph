@@ -47,15 +47,17 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
     [Serializable]
     public struct ActionModule {
         public ActionAsset asset;
+        public ActionDefinitionAsset definitionAsset;
         public ActionId action;
         public string guid;
         public string name;
 
-        public ActionModule(ActionAsset asset,string name) {
+        public ActionModule(ActionAsset asset, ActionDefinitionAsset definitionAsset, string name) {
             this.asset = asset;
             this.action = asset.actionId;
             this.guid = Guid.NewGuid().ToString("N");
             this.name = name;
+            this.definitionAsset = definitionAsset;
         }
     }
     [Serializable]
@@ -93,8 +95,9 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 var obj = JObject.Load(reader);
                 var target = hasExistingValue ? existingValue : new ActionModule();
                 target.asset = AssetDatabase.LoadAssetAtPath<ActionAsset>(AssetDatabase.GUIDToAssetPath(obj[nameof(ActionModule.asset)].Value<string>()));
+                target.definitionAsset = target.asset != null ? ActionDefinitionAsset.Load(target.asset.actionId) : null;
                 target.guid = obj[nameof(ActionModule.guid)].Value<string>();
-                target.action = target.asset.actionId;
+                target.action = target.asset?.actionId ?? default;
                 target.name = obj[nameof(ActionModule.name)].Value<string>();
                 return target;
             }

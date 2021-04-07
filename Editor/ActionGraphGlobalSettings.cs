@@ -19,11 +19,12 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace NeroWeNeed.ActionGraph.Editor {
-    public class ActionGraphGlobalSettings : ProjectGlobalSettings, IInitializable, IEnumerable<ActionDefinitionAsset> {
+    public class ActionGraphGlobalSettings : ProjectGlobalSettings {
         public const string Uxml = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphGlobalSettings.uxml";
         public const string Uss = "Packages/github.neroweneed.action-graph/Editor/Resources/ActionGraphGlobalSettings.uss";
         public const string DefaultTempDirectory = "Assets/Temp/ActionGraph";
         public const string DefaultArtifactDirectory = "Assets/Resources/Actions";
+        public const string DefaultDLLDirectory = "Assets/Libraries";
         public const string DefaultAddressablesArtifactDirectory = "Assets/ResourceData/Actions";
         public const string Extension = "action";
 
@@ -50,41 +51,19 @@ namespace NeroWeNeed.ActionGraph.Editor {
                 actions.Add(objField);
             }
         }
-        [Delayed]
         public string artifactDirectory = DefaultArtifactDirectory;
-        [Delayed]
         public string temporaryDirectory = DefaultTempDirectory;
-
-        //public List<ActionInfo> actions2 = new List<ActionInfo>();
+        public string actionSystemsDLLDirectory = DefaultDLLDirectory;
+        public string actionEditorUtilitiesDLLDirectory = DefaultDLLDirectory;
         public List<ActionDefinitionAsset> actions = new List<ActionDefinitionAsset>();
-
-
-        public ActionSchema.Action GetAction(ActionId actionId, string identifier) {
-            var actionInfo = this[actionId];
-            return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().data[actionInfo.delegateType][identifier];
-        }
-        public IEnumerable<ActionSchema.Action> GetActions(ActionId actionId) {
-            var actionInfo = this[actionId];
-            return ProjectUtility.GetOrCreateProjectAsset<ActionSchema>().data[actionInfo.delegateType].Values;
-        }
-        public ActionDefinitionAsset this[ActionId id]
-        {
-            get => actions.Find(actionInfo => actionInfo.id == id);
-        }
-
-        public bool TryGetActionInfo(string name, out ActionDefinitionAsset actionInfo) {
-            actionInfo = default;
-            var index = actions.FindIndex(actionInfo => actionInfo.displayName == name);
-            if (index < 0) {
-                return false;
-            }
-            else {
-                actionInfo = actions[index];
-                return true;
-            }
-        }
         public ActionAsset CreateTemporaryActionAsset(ActionId actionId) => CreateActionAsset(actionId, $"{temporaryDirectory}/{Guid.NewGuid().ToString("N")}.{Extension}");
-        public ActionAsset CreateActionAsset(string path) => CreateActionAsset(actions.Find(i => path.StartsWith(i.associatedDirectory))?.id ?? default, path);
+
+        public string CreateArtifactPath() {
+            if (!Directory.Exists(artifactDirectory)) {
+                Directory.CreateDirectory(artifactDirectory);
+            }
+            return $"{artifactDirectory}/{Guid.NewGuid().ToString("N")}.bytes";
+        }
         public ActionAsset CreateActionAsset(ActionId actionId, string path) {
             if (!path.EndsWith($".{Extension}")) {
                 path += $".{Extension}";
@@ -101,65 +80,35 @@ namespace NeroWeNeed.ActionGraph.Editor {
                     writer.Write(JsonConvert.SerializeObject(model, jsonSettings));
                 }
             }
+
             AssetDatabase.Refresh();
             return AssetDatabase.LoadAssetAtPath<ActionAsset>(path);
         }
-
-        public bool TryGetActionInfo(ActionId id, out ActionDefinitionAsset actionInfo) {
-            actionInfo = default;
-            var index = actions.FindIndex(actionInfo => actionInfo.id == id);
-            if (index < 0) {
-                return false;
-            }
-            else {
-                actionInfo = actions[index];
-                return true;
-            }
-        }
         private void OnValidate() {
-            var names = new HashSet<string>();
-            foreach (var action in actions) {
-                if (!names.Add(action.displayName)) {
-                    Debug.LogError($"Duplicate Action Found: {action.displayName}.");
-                }
-            }
-            if (string.IsNullOrWhiteSpace(temporaryDirectory)) {
-                temporaryDirectory = DefaultTempDirectory;
-            }
-            if (temporaryDirectory.EndsWith("/")) {
-                temporaryDirectory = temporaryDirectory.Substring(0, temporaryDirectory.Length - 1);
-            }
-            if (string.IsNullOrWhiteSpace(artifactDirectory)) {
+            var needsRefresh = false;
+            needsRefresh = FixDirectory(ref temporaryDirectory, DefaultTempDirectory) || needsRefresh;
 #if ADDRESSABLES_EXISTS
-                artifactDirectory = DefaultAddressablesArtifactDirectory;
+            needsRefresh = FixDirectory(ref artifactDirectory, DefaultAddressablesArtifactDirectory) || needsRefresh;
 #else
-                artifactDirectory = DefaultArtifactDirectory;
+needsRefresh = FixDirectory(ref artifactDirectory, DefaultArtifactDirectory) || needsRefresh;
 #endif
+            needsRefresh = FixDirectory(ref actionSystemsDLLDirectory, DefaultDLLDirectory) || needsRefresh;
+            needsRefresh = FixDirectory(ref actionEditorUtilitiesDLLDirectory, DefaultDLLDirectory) || needsRefresh;
+            if (needsRefresh) {
+                EditorUtility.SetDirty(this);
             }
-            if (artifactDirectory.EndsWith("/")) {
-                artifactDirectory = artifactDirectory.Substring(0, artifactDirectory.Length - 1);
+        }
+        private bool FixDirectory(ref string directory, string defaultDirectory) {
+            var dirty = false;
+            if (string.IsNullOrWhiteSpace(directory)) {
+                directory = defaultDirectory;
+                dirty = true;
             }
-
-        }
-
-        public void OnInit() { }
-
-        public IEnumerator<ActionDefinitionAsset> GetEnumerator() {
-            return actions.GetEnumerator();
-        }
-
-        IEnumerator IEnumerable.GetEnumerator() {
-            return actions.GetEnumerator();
-        }
-        private void UpdateActionList() {
-            actions = AssetDatabase.FindAssets($"t:{nameof(ActionDefinitionAsset)}").Select(guid => AssetDatabase.LoadAssetAtPath<ActionDefinitionAsset>(AssetDatabase.GUIDToAssetPath(guid))).ToList();
-            EditorUtility.SetDirty(this);
-        }
-        private void OnEnable() {
-            EditorApplication.projectChanged += UpdateActionList;
-        }
-        private void OnDisable() {
-            EditorApplication.projectChanged -= UpdateActionList;
+            if (directory.EndsWith("/")) {
+                directory = directory.Substring(0, directory.Length - 1);
+                dirty = true;
+            }
+            return dirty;
         }
     }
 }

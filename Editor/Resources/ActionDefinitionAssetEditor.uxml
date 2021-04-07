@@ -1,13 +1,11 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:VisualElement name="content" style="flex-grow: 1;">
-        <uie:PropertyField binding-path="id" enabled="false"/>
-        <uie:PropertyField binding-path="displayName" />
-        <uie:PropertyField binding-path="associatedDirectory" />
-        <uie:PropertyField binding-path="delegateType"/>
-        <uie:PropertyField binding-path="variableType" />
+        <ui:TextField label="Display Name" binding-path="displayName" class="requires-editor-dll-rebuild" />
+        <uie:PropertyField binding-path="delegateType" name="delegateType" class="requires-dll-rebuild requires-dll-rebuild--type" />
+        <uie:PropertyField binding-path="variableType" class="requires-dll-rebuild requires-dll-rebuild--type" />
         <uie:PropertyField binding-path="validatorType" />
-        <uie:PropertyField binding-path="useFieldTransformers" />
-        <uie:PropertyField binding-path="destroyEntitiesUsing" />
-        <ui:VisualElement name="aggregator-container"/>
+        <uie:PropertyField binding-path="useFieldOperations" class="requires-dll-rebuild requires-dll-rebuild--bool" />
+        <uie:PropertyField binding-path="destroyEntitiesUsing" class="requires-dll-rebuild requires-dll-rebuild--type" />
+        <uie:PropertyField binding-path="aggregator" name="aggregator" class="requires-dll-rebuild requires-dll-rebuild--method" />
     </ui:VisualElement>
 </ui:UXML>

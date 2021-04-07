@@ -15,18 +15,15 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
 
         public ActionGraphView graphView;
         public List<SearchTreeEntry> CreateSearchTree(SearchWindowContext context) {
-            var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
-
-            if (settings == null) {
-                return null;
-            }
+            var actionSchema = ProjectUtility.GetProjectAsset<ActionSchema>();
             List<SearchTreeEntry> result = new List<SearchTreeEntry>();
+
             result.Add(new SearchTreeGroupEntry(new GUIContent("Nodes")));
-            var useFieldOps = graphView.model.context.modules.Any(module => settings.TryGetActionInfo(module.action, out var info) && info.useFieldOperations);
+            var useFieldOps = graphView.model.context.modules.Any(module => module.definitionAsset.useFieldOperations);
             if (graphView.model.context.modules.Count > 1 || useFieldOps) {
                 foreach (var module in graphView.model.context.modules) {
-                    result.Add(new SearchTreeGroupEntry(new GUIContent(settings[module.action].Name), 1));
-                    CreateSearchTree(result, context, module, settings, 2);
+                    result.Add(new SearchTreeGroupEntry(new GUIContent(module.definitionAsset.Name), 1));
+                    CreateSearchTree(result, module, actionSchema, 2);
                 }
                 if (useFieldOps) {
                     var fieldOps = ProjectUtility.GetOrCreateProjectAsset<FieldOperationSchema>();
@@ -44,19 +41,19 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 }
             }
             else if (graphView.model.context.modules.Count == 1) {
-                CreateSearchTree(result, context, graphView.model.context.modules[0], settings, 1);
+                CreateSearchTree(result, graphView.model.context.modules[0], actionSchema, 1);
             }
             return result;
         }
 
-        private void CreateSearchTree(List<SearchTreeEntry> treeEntries, SearchWindowContext context, ActionModule module, ActionGraphGlobalSettings settings, int depth) {
-            var info = settings[module.action];
+        private void CreateSearchTree(List<SearchTreeEntry> treeEntries, ActionModule module, ActionSchema schema, int depth) {
+
             var entries = new List<SearchTreeEntry>();
-            foreach (var action in settings.GetActions(module.action)) {
+            foreach (var action in schema[module.definitionAsset]) {
                 entries.Add(new SearchTreeEntry(new GUIContent(action.Name))
                 {
                     level = depth,
-                    userData = new EntryData { actionType = module.action, identifier = action.identifier, fieldOp = false }
+                    userData = new EntryData { actionId = module.action, identifier = action.identifier, fieldOp = false, actionType = module.definitionAsset.delegateType }
                 });
             }
             entries.Sort((entryA, entryB) => entryA.name.CompareTo(entryB.name));
@@ -67,6 +64,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             if (searchTreeEntry.userData is EntryData data) {
                 var guid = Guid.NewGuid().ToString("N");
                 var settings = ProjectUtility.GetProjectSettings<ActionGraphGlobalSettings>();
+
                 if (data.fieldOp) {
                     var operations = ProjectUtility.GetProjectAsset<FieldOperationSchema>();
                     var nodeData = new FieldOperationNodeData
@@ -79,12 +77,14 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                     graphView.RefreshNodeConnections();
                 }
                 else {
+                    var actionSchema = ProjectUtility.GetProjectAsset<ActionSchema>();
                     var actionData = new ActionNodeData
                     {
-                        actionId = data.actionType,
+                        actionId = data.actionId,
                         identifier = data.identifier,
-                        subIdentifier = settings.GetAction(data.actionType, data.identifier).GetDefaultSubIdentifier()
+                        subIdentifier = actionSchema[data.actionType, data.identifier].DefaultSubIdentifier
                     };
+
                     graphView.model[guid] = actionData;
                     graphView.AddElement(actionData.CreateNode(graphView, settings, new Rect(graphView.contentViewContainer.WorldToLocal(graphView.panel.visualTree.ChangeCoordinatesTo(graphView.panel.visualTree, context.screenMousePosition - graphView.window.position.position)), ActionGraphView.DefaultNodeSize), guid));
                     graphView.RefreshNodeConnections();
@@ -95,7 +95,8 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         }
         private struct EntryData {
             public bool fieldOp;
-            public ActionId actionType;
+            public ActionId actionId;
+            public Type actionType;
             public string identifier;
 
         }

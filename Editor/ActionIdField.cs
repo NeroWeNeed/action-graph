@@ -14,13 +14,12 @@ namespace NeroWeNeed.ActionGraph.Editor {
             this.formatListItemCallback = FormatCell;
             this.formatSelectedValueCallback = FormatCell;
         }
-
         private string FormatCell(ActionId actionId) {
             if (settings == null)
                 return ActionId.UnknownActionName;
             if (!actionId.IsCreated)
                 return ActionId.NullActionName;
-            if (settings.TryGetActionInfo(actionId, out var info)) {
+            if (ActionDefinitionAsset.Load(actionId, out var info)) {
                 return info.Name;
             }
             else {
@@ -28,7 +27,7 @@ namespace NeroWeNeed.ActionGraph.Editor {
             }
         }
         private static List<ActionId> GetItems() {
-            var items = ProjectUtility.GetOrCreateProjectSettings<ActionGraphGlobalSettings>().Select(info => info.id).ToList();
+            var items = ActionDefinitionAsset.LoadAll().Select(definition => definition.id).ToList();
             items.Insert(0, default);
             return items;
         }

@@ -144,7 +144,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
                 node.ClearNotifications();
             }
             foreach (var moduleNodeCollection in moduleNodeCollections) {
-                var info = settings[model.context.modules[moduleNodeCollection.Key].action];
+                var info = model.context.modules[moduleNodeCollection.Key].definitionAsset;
                 if (info.validatorType.IsCreated && !actionValidationRuleCache[info.validatorType.Value].IsValid(this, moduleNodeCollection.Value)) {
                     return false;
                 }
@@ -274,7 +274,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             masterNode.AddModule(module);
             var model = module.asset.CreateModel();
             if (!this.model.actionInfo.ContainsKey(module.action.guid)) {
-                var actionInfo = settings[module.action];
+                var actionInfo = module.definitionAsset;
                 var variableType = actionInfo.variableType;
                 var variables = new Dictionary<string, ActionGraphModel.VariableInfo>();
                 if (variableType.IsCreated) {
@@ -385,7 +385,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
         public void Save(NodeCollection nodes, ActionModule module, ActionGraphGlobalSettings settings) {
             var model = new ActionAssetModel
             {
-                id = settings[module.action].id,
+                id = module.definitionAsset.id,
                 masterNodeLayout = masterNode.GetPosition(),
                 nodes = nodes.ToDictionary(info => info.guid, info =>
                 {
@@ -399,7 +399,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Graph {
             jsonSettings.TypeNameHandling = TypeNameHandling.All;
             var path = AssetDatabase.GetAssetPath(module.asset);
             if (string.IsNullOrEmpty(path)) {
-                path = EditorUtility.SaveFilePanelInProject($"Save Action Asset {module.name} as...", settings[module.action].Name, ActionGraphGlobalSettings.Extension, string.Empty);
+                path = EditorUtility.SaveFilePanelInProject($"Save Action Asset {module.name} as...", module.definitionAsset.Name, ActionGraphGlobalSettings.Extension, string.Empty);
                 if (string.IsNullOrEmpty(path)) {
                     return;
                 }

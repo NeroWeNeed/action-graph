@@ -1,9 +1,10 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
     <ui:VisualElement style="flex-grow: 1;">
         <ui:Label text="General" class="section-title" />
-        <uie:PropertyField binding-path="artifactDirectory" label="Artifact Directory" />
-        <!-- <uie:PropertyField binding-path="syncOnReload" label="Search On Reload" /> -->
-        <!-- <ui:Button name="reload-actions" text="Reload Actions" style="align-self: flex-start;" /> -->
+        <ui:TextField binding-path="artifactDirectory" label="Artifact Directory" />
+        <ui:TextField binding-path="temporaryDirectory" label="Temporary Directory" />
+        <ui:TextField binding-path="actionSystemsDLLDirectory" label="DLL Directory" />
+        <ui:TextField binding-path="actionEditorUtilitiesDLLDirectory" label="Editor DLL Directory" />
         <ui:Label text="Actions" class="section-title" />
         <ui:VisualElement name="actions">
             <!-- ui:ListView binding-path="actions" name="actions" label="Actions" style="min-height: 180px; max-height: 240px;" item-height="60" reorderable="true" show-bound-collection-size="false" /> -->

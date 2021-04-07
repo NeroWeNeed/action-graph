@@ -7,7 +7,7 @@ using Unity.Entities;
 namespace NeroWeNeed.ActionGraph {
 
     public struct ActionRequest<TAction> : IComponentData where TAction : Delegate {
-        public BlobAssetReference<BlobGraph<TAction>> value;
+        public BlobAssetReference<ActionGraph<TAction>> value;
     }
     public struct ActionRequestAt<TAction> : IComponentData where TAction : Delegate {
         public int startIndex;
@@ -21,6 +21,11 @@ namespace NeroWeNeed.ActionGraph {
     }
     public interface IFunctionList : IComponentData { }
     public interface IActionList : IFunctionList { }
+
+    public struct Action<TAction> : IBufferElementData where TAction : Delegate {
+        public BlobAssetReference<ActionGraph<TAction>> value;
+        public static implicit operator Action<TAction>(BlobAssetReference<ActionGraph<TAction>> asset) => new Action<TAction> { value = asset };
+    }
     public struct ActionList<TAction> : IActionList where TAction : Delegate {
         public BlobAssetReference<FunctionList<TAction>> value;
         public FunctionPointer<TAction> this[int index]
@@ -29,7 +34,7 @@ namespace NeroWeNeed.ActionGraph {
         }
         public bool IsCreated => value.IsCreated;
     }
-    public struct FieldOperationList : IFunctionList  {
+    public struct FieldOperationList : IFunctionList {
         public BlobAssetReference<FunctionList<FieldOperation>> value;
         public FunctionPointer<FieldOperation> this[int index]
         {

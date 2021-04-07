@@ -13,7 +13,7 @@ using UnityEngine;
 namespace NeroWeNeed.ActionGraph.Editor {
     [Serializable]
     public class ActionAssetModel {
-        public ActionId id;        
+        public ActionId id;
         public Rect masterNodeLayout;
         public Dictionary<string, Node> nodes = new Dictionary<string, Node>();
 

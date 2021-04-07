@@ -12,6 +12,11 @@ namespace NeroWeNeed.ActionGraph {
         public string guid;
         [JsonIgnore]
         public bool IsCreated { get => !string.IsNullOrEmpty(guid); }
+
+        public ActionId(string guid) {
+            this.guid = guid;
+        }
+
         public static ActionId Create() => new ActionId { guid = Guid.NewGuid().ToString("N") };
 
         public override bool Equals(object obj) {

@@ -75,10 +75,6 @@ namespace NeroWeNeed.ActionGraph {
     public unsafe struct ActionExecutionDoFieldOperations<TActionDelegate> : IJobEntityBatch where TActionDelegate : Delegate {
         [ReadOnly]
         public ComponentTypeHandle<ActionRequest<TActionDelegate>> requestHandle;
-
-        [ReadOnly]
-        public FieldOperationList operations;
-
         [ReadOnly]
         public NativeArray<ConfigInfo> handles;
         [BurstCompile]
@@ -91,8 +87,7 @@ namespace NeroWeNeed.ActionGraph {
                     for (int j = 0; j < graph.Value.operations.Length; j++) {
                         var config = ((IntPtr)handles[i].handle) + graph.Value.operations[j].configOffset;
                         var destination = ((IntPtr)handles[i].handle) + graph.Value.operations[j].destinationOffset;
-                        var call = operations[graph.Value.operations[j].id];
-                        call.Invoke(config, destination);
+                        graph.Value.operations[j].operation.Invoke(config, destination);
                     }
                 }
             }

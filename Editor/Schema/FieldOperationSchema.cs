@@ -31,6 +31,13 @@ namespace NeroWeNeed.ActionGraph.Editor.Schema {
         internal Dictionary<string, Dictionary<string, Operation>> assemblyData = new Dictionary<string, Dictionary<string, Operation>>();
         [JsonIgnore]
         public DictionaryView<string, Dictionary<string, Operation>, string, Operation> data;
+        public Operation this[string identifier] {
+            get => data[identifier];
+        }
+        public Operation.Variant this[string identifier,string subIdentifier]
+        {
+            get => data[identifier].callVariants[subIdentifier];
+        }
         public FieldOperationSchema() {
             this.data = new DictionaryView<string, Dictionary<string, Operation>, string, Operation>(() => assemblyData, (old) => old.Values.SelectMany(a => a.Values).GroupBy(a => a.identifier).ToDictionary(a => a.Key, b => new Operation
             {
@@ -38,7 +45,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Schema {
                 callVariants = b.SelectMany(c => c.callVariants).ToDictionary(d => d.Key, d => d.Value)
             }).ToDictionary(a => a.Key, b => b.Value));
         }
-        public BlobAssetReference<FunctionList<FieldOperation>> CreateOperationsList(Allocator allocator = Allocator.Persistent) {
+        public BlobAssetReference<FunctionList<FieldOperation>> CreateFunctionList(Allocator allocator = Allocator.Persistent) {
             var operations = data.SelectMany(operation => operation.Value.callVariants.Select(variant => (operationName: operation.Key, variantName: variant.Key, variant: variant.Value.method.Value))).ToArray();
             Array.Sort(operations, (a, b) =>
             {
@@ -49,6 +56,14 @@ namespace NeroWeNeed.ActionGraph.Editor.Schema {
         }
         public void OnInit() {
             AssemblyAnalyzer.AnalyzeAssemblies(new FieldOperationFinder() { schema = this });
+        }
+        internal void UpdateIndices() {
+            int index = 0;
+            foreach (var entry in data.SelectMany(kv => kv.Value.callVariants.Select(variant => (identifier: kv.Key, subIdentifier: variant.Key, variant: variant.Value))).OrderBy((a) => a.identifier + ':' + a.subIdentifier))
+            {
+                entry.variant.index = index++;
+            }
+
         }
 
         [Serializable]
@@ -69,11 +84,12 @@ namespace NeroWeNeed.ActionGraph.Editor.Schema {
             public Variant GetDefaultVariant() => callVariants.FirstOrDefault().Value;
             public string GetDefaultSubIdentifier() => callVariants.FirstOrDefault().Key;
             [Serializable]
-            public struct Variant : IEquatable<Variant> {
+            public class Variant : IEquatable<Variant> {
                 public string displayName;
                 public SerializableType configType;
                 public SerializableMethod method;
                 public SerializableType outputType;
+                public int index;
 
                 public override bool Equals(object obj) {
                     return obj is Variant call &&

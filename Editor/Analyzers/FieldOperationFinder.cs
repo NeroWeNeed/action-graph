@@ -67,6 +67,7 @@ namespace NeroWeNeed.ActionGraph.Editor.Analyzer {
                 else {
                     schema.assemblyData[assembly] = operations;
                 }
+                schema.UpdateIndices();
                 ProjectUtility.UpdateProjectAsset(schema);
             }
         }
